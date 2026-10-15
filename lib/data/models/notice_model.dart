@@ -17,7 +17,7 @@ class NoticeModel {
 
   const NoticeModel({
     required this.id,
-    this.schoolId = 'SCH-STX-2026',
+    this.schoolId = '',
     this.className,
     this.studentId,
     required this.title,
@@ -80,7 +80,7 @@ class NoticeModel {
 
     return NoticeModel(
       id: map['id'] ?? map['notice_id'] ?? 'NOTICE-${DateTime.now().millisecondsSinceEpoch}',
-      schoolId: map['school_id'] ?? 'SCH-STX-2026',
+      schoolId: map['school_id'] ?? '',
       className: map['class_name'] ?? map['class'],
       studentId: map['student_id'],
       title: map['title'] ?? map['heading'] ?? 'School Notice',

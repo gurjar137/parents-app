@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../data/models/result_model.dart';
@@ -40,7 +39,15 @@ class ReportCardScreen extends StatelessWidget {
                 context: context,
                 title: 'Official Academic Report Card',
                 documentName: 'ReportCard_${child.name}_${examResult.examName}.pdf',
-                contentWidget: _buildReportCardPaper(child.name, child.className, child.rollNo, child.admissionNo),
+                contentWidget: _buildReportCardPaper(
+                  studentName: child.name,
+                  className: child.className,
+                  rollNo: child.rollNo,
+                  admissionNo: child.admissionNo,
+                  schoolName: provider.branding.schoolName,
+                  schoolAddress: provider.branding.address,
+                  fatherName: child.displayFatherName,
+                ),
               );
             },
           ),
@@ -58,7 +65,15 @@ class ReportCardScreen extends StatelessWidget {
                 border: Border.all(color: AppColors.border),
                 boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 10)],
               ),
-              child: _buildReportCardPaper(child.name, child.className, child.rollNo, child.admissionNo),
+              child: _buildReportCardPaper(
+                studentName: child.name,
+                className: child.className,
+                rollNo: child.rollNo,
+                admissionNo: child.admissionNo,
+                schoolName: provider.branding.schoolName,
+                schoolAddress: provider.branding.address,
+                fatherName: child.displayFatherName,
+              ),
             ),
             const SizedBox(height: 24),
             Row(
@@ -84,7 +99,15 @@ class ReportCardScreen extends StatelessWidget {
                         context: context,
                         title: 'Official Academic Report Card',
                         documentName: 'ReportCard_${child.name}.pdf',
-                        contentWidget: _buildReportCardPaper(child.name, child.className, child.rollNo, child.admissionNo),
+                        contentWidget: _buildReportCardPaper(
+                          studentName: child.name,
+                          className: child.className,
+                          rollNo: child.rollNo,
+                          admissionNo: child.admissionNo,
+                          schoolName: provider.branding.schoolName,
+                          schoolAddress: provider.branding.address,
+                          fatherName: child.displayFatherName,
+                        ),
                       );
                     },
                   ),
@@ -97,7 +120,15 @@ class ReportCardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildReportCardPaper(String studentName, String className, int rollNo, String admissionNo) {
+  Widget _buildReportCardPaper({
+    required String studentName,
+    required String className,
+    required int rollNo,
+    required String admissionNo,
+    required String schoolName,
+    required String schoolAddress,
+    required String fatherName,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -105,9 +136,11 @@ class ReportCardScreen extends StatelessWidget {
         Center(
           child: Column(
             children: [
-              Text(AppConstants.schoolName, style: AppTextStyles.headingSmall.copyWith(fontSize: 18), textAlign: TextAlign.center),
-              const SizedBox(height: 2),
-              Text(AppConstants.schoolAddress, style: AppTextStyles.caption, textAlign: TextAlign.center),
+              Text(schoolName, style: AppTextStyles.headingSmall.copyWith(fontSize: 18), textAlign: TextAlign.center),
+              if (schoolAddress.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(schoolAddress, style: AppTextStyles.caption, textAlign: TextAlign.center),
+              ],
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -132,6 +165,8 @@ class ReportCardScreen extends StatelessWidget {
         Text('Student Credentials', style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
         const SizedBox(height: 6),
         StatRow(label: 'Student Name:', value: studentName),
+        if (fatherName.isNotEmpty && fatherName != 'Not provided')
+          StatRow(label: "Father's Name:", value: fatherName),
         StatRow(label: 'Class & Section:', value: className),
         StatRow(label: 'Roll Number:', value: '$rollNo'),
         StatRow(label: 'Admission No:', value: admissionNo),

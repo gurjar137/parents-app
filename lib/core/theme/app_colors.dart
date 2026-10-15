@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   // Primary Palette - Deep Slate Indigo & Navy Trust
-  static const Color primary = Color(0xFF1E293B); // Slate 800
-  static const Color primaryAccent = Color(0xFF334155); // Slate 700
+  static const Color primary = Color(0xFF10182D); // Deep Navy (#10182D)
+  static const Color primaryAccent = Color(0xFF1E293B); // Slate 800
   static const Color brandBlue = Color(0xFF2563EB); // Royal Blue
-  static const Color brandIndigo = Color(0xFF4F46E5); // Indigo
+  static const Color brandIndigo = Color(0xFF4F46E5); // Indigo (#4F46E5)
 
   // Light Backgrounds & Surface
-  static const Color background = Color(0xFFF8FAFC); // Slate 50
+  static const Color background = Color(0xFFF5F7FB); // Premium Light (#F5F7FB)
   static const Color surface = Color(0xFFFFFFFF);
   static const Color cardBg = Color(0xFFFFFFFF);
   static const Color subSurface = Color(0xFFF1F5F9); // Slate 100

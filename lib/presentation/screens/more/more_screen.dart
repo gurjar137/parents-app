@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../providers/parent_app_provider.dart';
 import '../../widgets/animated_card.dart';
+import '../../widgets/correction_request_dialog.dart';
 import '../transport/transport_screen.dart';
 import '../calendar/school_calendar_screen.dart';
 import '../ai_assistant/ai_assistant_screen.dart';
@@ -12,6 +12,12 @@ import '../ptm/ptm_screen.dart';
 import '../documents/documents_screen.dart';
 import '../class_info/class_info_screen.dart';
 import '../profile/parent_profile_screen.dart';
+import '../fees/fees_screen.dart';
+import '../messages/messages_screen.dart';
+import '../timetable/timetable_screen.dart';
+import '../notices/notices_screen.dart';
+import '../exams/exams_screen.dart';
+import '../auth/parent_login_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -25,7 +31,7 @@ class MoreScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('More Services', style: AppTextStyles.headingSmall),
+        title: Text('All Services & Settings', style: AppTextStyles.headingSmall),
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -70,6 +76,51 @@ class MoreScreen extends StatelessWidget {
             Text('Student & School Services', style: AppTextStyles.headingSmall),
             const SizedBox(height: 12),
 
+            _buildServiceTile(
+              icon: Icons.account_balance_wallet_rounded,
+              title: 'Fees & Payment Ledger',
+              subtitle: 'Fee invoices, payment receipts and breakdown',
+              color: AppColors.brandBlue,
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const FeesScreen()));
+              },
+            ),
+            _buildServiceTile(
+              icon: Icons.chat_bubble_outline_rounded,
+              title: 'Messages & Remarks',
+              subtitle: 'Direct communication with teachers & mentors',
+              color: AppColors.brandIndigo,
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const MessagesScreen()));
+              },
+            ),
+            _buildServiceTile(
+              icon: Icons.schedule_rounded,
+              title: 'Class Timetable',
+              subtitle: 'Weekly subject periods, timings and teachers',
+              color: const Color(0xFF06B6D4),
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const TimetableScreen()));
+              },
+            ),
+            _buildServiceTile(
+              icon: Icons.campaign_rounded,
+              title: 'Notice Board',
+              subtitle: 'Official circulars and announcements from school',
+              color: AppColors.warning,
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticesScreen()));
+              },
+            ),
+            _buildServiceTile(
+              icon: Icons.assignment_turned_in_rounded,
+              title: 'Examination Schedules',
+              subtitle: 'Upcoming exam dates, portions and timings',
+              color: AppColors.holiday,
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ExamsScreen()));
+              },
+            ),
             _buildServiceTile(
               icon: Icons.directions_bus_rounded,
               title: 'School Bus & Transport',
@@ -122,6 +173,15 @@ class MoreScreen extends StatelessWidget {
               color: AppColors.danger,
               onTap: () {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ClassInfoScreen()));
+              },
+            ),
+            _buildServiceTile(
+              icon: Icons.edit_note_rounded,
+              title: 'Request Info Correction',
+              subtitle: 'Submit official corrections for child\'s records',
+              color: const Color(0xFF0D9488),
+              onTap: () {
+                CorrectionRequestDialog.show(context, child.name);
               },
             ),
 
@@ -193,7 +253,7 @@ class MoreScreen extends StatelessWidget {
             Center(
               child: Column(
                 children: [
-                  Text(AppConstants.schoolName, style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
+                  Text(provider.branding.schoolName, style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
                   Text('${provider.branding.affiliation} • Version 2.0 (Premium Build)', style: AppTextStyles.caption),
                 ],
               ),
@@ -265,9 +325,15 @@ class MoreScreen extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              provider.logout();
+              await provider.logout();
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const ParentLoginScreen()),
+                  (route) => false,
+                );
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('Log Out'),

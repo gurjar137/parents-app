@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/currency_formatter.dart';
@@ -32,7 +31,14 @@ class ReceiptDetailScreen extends StatelessWidget {
                 context: context,
                 title: 'Official Fee Receipt',
                 documentName: '${payment.receiptNo}.pdf',
-                contentWidget: _buildReceiptPaperContent(child.name, child.admissionNo, child.className, child.rollNo),
+                contentWidget: _buildReceiptPaperContent(
+                  studentName: child.name,
+                  admissionNo: child.admissionNo,
+                  className: child.className,
+                  rollNo: child.rollNo,
+                  schoolName: provider.branding.schoolName,
+                  schoolAddress: provider.branding.address,
+                ),
               );
             },
           ),
@@ -50,7 +56,14 @@ class ReceiptDetailScreen extends StatelessWidget {
                 border: Border.all(color: AppColors.border),
                 boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 10)],
               ),
-              child: _buildReceiptPaperContent(child.name, child.admissionNo, child.className, child.rollNo),
+              child: _buildReceiptPaperContent(
+                studentName: child.name,
+                admissionNo: child.admissionNo,
+                className: child.className,
+                rollNo: child.rollNo,
+                schoolName: provider.branding.schoolName,
+                schoolAddress: provider.branding.address,
+              ),
             ),
             const SizedBox(height: 24),
             Row(
@@ -76,7 +89,14 @@ class ReceiptDetailScreen extends StatelessWidget {
                         context: context,
                         title: 'Official Fee Receipt',
                         documentName: '${payment.receiptNo}.pdf',
-                        contentWidget: _buildReceiptPaperContent(child.name, child.admissionNo, child.className, child.rollNo),
+                        contentWidget: _buildReceiptPaperContent(
+                          studentName: child.name,
+                          admissionNo: child.admissionNo,
+                          className: child.className,
+                          rollNo: child.rollNo,
+                          schoolName: provider.branding.schoolName,
+                          schoolAddress: provider.branding.address,
+                        ),
                       );
                     },
                   ),
@@ -89,7 +109,14 @@ class ReceiptDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildReceiptPaperContent(String studentName, String admissionNo, String className, int rollNo) {
+  Widget _buildReceiptPaperContent({
+    required String studentName,
+    required String admissionNo,
+    required String className,
+    required int rollNo,
+    required String schoolName,
+    required String schoolAddress,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -97,9 +124,11 @@ class ReceiptDetailScreen extends StatelessWidget {
         Center(
           child: Column(
             children: [
-              Text(AppConstants.schoolName, style: AppTextStyles.headingSmall.copyWith(fontSize: 18), textAlign: TextAlign.center),
-              const SizedBox(height: 2),
-              Text(AppConstants.schoolAddress, style: AppTextStyles.caption, textAlign: TextAlign.center),
+              Text(schoolName, style: AppTextStyles.headingSmall.copyWith(fontSize: 18), textAlign: TextAlign.center),
+              if (schoolAddress.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(schoolAddress, style: AppTextStyles.caption, textAlign: TextAlign.center),
+              ],
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -205,7 +234,7 @@ class ReceiptDetailScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text('Accounts Officer', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
-                Text(AppConstants.schoolName, style: AppTextStyles.caption),
+                Text(schoolName, style: AppTextStyles.caption),
               ],
             ),
           ],

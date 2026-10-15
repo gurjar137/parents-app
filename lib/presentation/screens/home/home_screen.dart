@@ -9,15 +9,14 @@ import '../../widgets/animated_card.dart';
 import '../../widgets/child_selector_sheet.dart';
 import '../../widgets/needs_attention_card.dart';
 import '../../widgets/offline_banner.dart';
-import '../../widgets/quick_actions_row.dart';
 import '../../widgets/status_badge.dart';
 import '../homework/homework_detail_screen.dart';
 import '../notices/notice_detail_screen.dart';
 import '../notices/notices_screen.dart';
-import '../results/results_screen.dart';
-import '../calendar/school_calendar_screen.dart';
-import '../ai_assistant/ai_assistant_screen.dart';
-
+import '../fees/fees_screen.dart';
+import '../messages/messages_screen.dart';
+import '../timetable/timetable_screen.dart';
+import '../transport/transport_screen.dart';
 import '../auth/link_child_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -138,6 +137,7 @@ class HomeScreen extends StatelessWidget {
         ),
       );
     }
+
     final attendance = provider.currentAttendance;
     final fee = provider.currentFeeSummary;
     final homeworkList = provider.currentHomeworkList;
@@ -146,9 +146,10 @@ class HomeScreen extends StatelessWidget {
 
     final pendingHwCount = homeworkList.where((h) => !h.isCompleted).length;
     final latestResult = results.isNotEmpty ? results.first : null;
+    final nextClass = provider.nextClassEntry;
 
     // Attention Alerts
-    List<AttentionAlertItem> attentionAlerts = [];
+    final List<AttentionAlertItem> attentionAlerts = [];
     if (fee.pendingAmount > 0) {
       final dueStr = fee.dueDate != null ? 'by ${DateFormatter.formatShort(fee.dueDate!)}' : 'soon';
       attentionAlerts.add(AttentionAlertItem(
@@ -156,7 +157,9 @@ class HomeScreen extends StatelessWidget {
         title: 'Fee Payment Due',
         subtitle: '${CurrencyFormatter.formatINR(fee.pendingAmount)} due $dueStr',
         color: AppColors.warning,
-        onTap: () => provider.setBottomNavIndex(2),
+        onTap: () {
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const FeesScreen()));
+        },
       ));
     }
     if (pendingHwCount > 0) {
@@ -176,67 +179,64 @@ class HomeScreen extends StatelessWidget {
     }
     if (latestResult != null) {
       attentionAlerts.add(AttentionAlertItem(
-        icon: Icons.grade_rounded,
+        icon: Icons.school_rounded,
         title: '${latestResult.examName} Result Published',
         subtitle: 'Scored ${latestResult.overallPercentage.toStringAsFixed(1)}% (Grade ${latestResult.overallGrade})',
         color: AppColors.holiday,
         onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ResultsScreen()),
-          );
+          provider.setBottomNavIndex(3);
         },
       ));
     }
 
     final quickActions = [
-      QuickActionItem(
-        icon: Icons.assignment_outlined,
-        label: 'Homework',
-        color: AppColors.warning,
-        onTap: () => provider.setBottomNavIndex(1),
-      ),
-      QuickActionItem(
+      _QuickActionData(
         icon: Icons.calendar_today_rounded,
         label: 'Attendance',
         color: AppColors.success,
         onTap: () => provider.setBottomNavIndex(1),
       ),
-      QuickActionItem(
+      _QuickActionData(
+        icon: Icons.assignment_outlined,
+        label: 'Homework',
+        color: AppColors.warning,
+        onTap: () => provider.setBottomNavIndex(2),
+      ),
+      _QuickActionData(
+        icon: Icons.school_outlined,
+        label: 'Results',
+        color: AppColors.holiday,
+        onTap: () => provider.setBottomNavIndex(3),
+      ),
+      _QuickActionData(
         icon: Icons.account_balance_wallet_rounded,
         label: 'Fees',
         color: AppColors.brandBlue,
-        onTap: () => provider.setBottomNavIndex(2),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FeesScreen())),
       ),
-      QuickActionItem(
-        icon: Icons.grade_outlined,
-        label: 'Results',
-        color: AppColors.holiday,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ResultsScreen())),
-      ),
-      QuickActionItem(
+      _QuickActionData(
         icon: Icons.schedule_rounded,
         label: 'Timetable',
         color: const Color(0xFF06B6D4),
-        onTap: () => provider.setBottomNavIndex(1),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TimetableScreen())),
       ),
-      QuickActionItem(
+      _QuickActionData(
+        icon: Icons.campaign_rounded,
+        label: 'Notices',
+        color: AppColors.warning,
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticesScreen())),
+      ),
+      _QuickActionData(
         icon: Icons.chat_bubble_outline_rounded,
         label: 'Messages',
         color: AppColors.brandIndigo,
-        onTap: () => provider.setBottomNavIndex(3),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MessagesScreen())),
       ),
-      QuickActionItem(
-        icon: Icons.event_note_rounded,
-        label: 'Exams',
-        color: const Color(0xFFF59E0B),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SchoolCalendarScreen())),
-      ),
-      QuickActionItem(
-        icon: Icons.auto_awesome_rounded,
-        label: 'AI Copilot',
-        color: AppColors.brandIndigo,
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AiAssistantScreen())),
+      _QuickActionData(
+        icon: Icons.directions_bus_rounded,
+        label: 'Bus',
+        color: const Color(0xFF0D9488),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransportScreen())),
       ),
     ];
 
@@ -253,62 +253,116 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 1. CHILD SUMMARY CARD
+                  // 1. CHILD PROFILE HERO CARD
                   AnimatedCard(
                     onTap: () => ChildSelectorSheet.show(context),
                     backgroundColor: AppColors.primary,
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
-                      child: Row(
+                      child: Column(
                         children: [
-                          CircleAvatar(
-                            radius: 30,
-                            backgroundImage: NetworkImage(child.avatarUrl),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                          Row(
+                            children: [
+                              Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2),
+                                ),
+                                child: CircleAvatar(
+                                  radius: 28,
+                                  backgroundImage: NetworkImage(child.avatarUrl),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Text(
-                                        child.name,
-                                        style: AppTextStyles.headingMedium.copyWith(color: Colors.white, fontSize: 18),
-                                      ),
-                                    ),
-                                    if (provider.children.length > 1)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Text(
-                                              'Switch',
-                                              style: AppTextStyles.caption.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            child.name,
+                                            style: AppTextStyles.headingMedium.copyWith(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
                                             ),
-                                            const Icon(Icons.arrow_drop_down_rounded, color: Colors.white, size: 16),
-                                          ],
+                                          ),
                                         ),
-                                      ),
+                                        if (provider.children.length > 1)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  'Switch',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                SizedBox(width: 2),
+                                                Icon(Icons.arrow_drop_down_rounded, color: Colors.white, size: 16),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${child.grade} • Section ${child.section} | Roll No. ${child.rollNo}',
+                                      style: AppTextStyles.bodyMedium.copyWith(color: Colors.white.withOpacity(0.9)),
+                                    ),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${child.grade} • Section ${child.section} | Roll No. ${child.rollNo}',
-                                  style: AppTextStyles.bodyMedium.copyWith(color: Colors.white70),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Divider(color: Colors.white12, height: 1),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.badge_outlined, color: Colors.white60, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Adm: ${child.admissionNo}',
+                                    style: AppTextStyles.caption.copyWith(color: Colors.white70, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                              if (child.fatherName != null && child.fatherName!.trim().isNotEmpty)
+                                Row(
+                                  children: [
+                                    const Icon(Icons.person_outline, color: Colors.white60, size: 14),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Father: ${child.fatherName!.trim()}',
+                                      style: AppTextStyles.caption.copyWith(color: Colors.white70, fontSize: 11),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Student ID: ${child.admissionNo} • ${provider.branding.schoolName}',
-                                  style: AppTextStyles.caption.copyWith(color: Colors.white60, fontSize: 11),
-                                ),
-                              ],
-                            ),
+                              Row(
+                                children: [
+                                  const Icon(Icons.account_balance_outlined, color: Colors.white60, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    provider.branding.schoolName,
+                                    style: AppTextStyles.caption.copyWith(color: Colors.white70, fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -317,23 +371,75 @@ class HomeScreen extends StatelessWidget {
 
                   const SizedBox(height: 16),
 
-                  // 2. ATTENTION ALERTS CARD
+                  // 2. ATTENTION ALERTS
                   if (attentionAlerts.isNotEmpty) ...[
                     NeedsAttentionCard(alerts: attentionAlerts),
                     const SizedBox(height: 16),
                   ],
 
-                  // 3. QUICK ACTIONS GRID
+                  // 3. QUICK ACTIONS GRID (4 columns)
                   Text('Quick Access', style: AppTextStyles.headingSmall),
                   const SizedBox(height: 12),
-                  QuickActionsRow(actions: quickActions),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: quickActions.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 4,
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 0.88,
+                    ),
+                    itemBuilder: (context, index) {
+                      final item = quickActions[index];
+                      return InkWell(
+                        onTap: item.onTap,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkSurface : AppColors.surface,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.border),
+                            boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 4)],
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: item.color.withOpacity(0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(item.icon, color: item.color, size: 22),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                item.label,
+                                style: AppTextStyles.caption.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 11,
+                                  color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
 
                   const SizedBox(height: 20),
 
-                  // 4. TODAY SUMMARY SECTION
+                  // 4. TODAY'S ACADEMIC OVERVIEW
                   Text('Today\'s Overview', style: AppTextStyles.headingSmall),
                   const SizedBox(height: 12),
 
+                  // Row 1: Attendance & Fees
                   Row(
                     children: [
                       // Attendance Compact Summary
@@ -349,7 +455,7 @@ class HomeScreen extends StatelessWidget {
                                 children: [
                                   const Icon(Icons.calendar_today_rounded, color: AppColors.success, size: 20),
                                   StatusBadge(
-                                    label: '${attendance.percentage.toInt()}%',
+                                    label: '${attendance.percentage.toStringAsFixed(1)}%',
                                     type: StatusType.success,
                                   ),
                                 ],
@@ -360,6 +466,18 @@ class HomeScreen extends StatelessWidget {
                               Text(
                                 '${attendance.presentDays} Present, ${attendance.absentDays} Absent',
                                 style: AppTextStyles.caption,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: (attendance.percentage / 100).clamp(0.0, 1.0),
+                                  backgroundColor: isDark ? AppColors.darkSubSurface : AppColors.subSurface,
+                                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.success),
+                                  minHeight: 5,
+                                ),
                               ),
                             ],
                           ),
@@ -371,7 +489,9 @@ class HomeScreen extends StatelessWidget {
                       // Fee Compact Summary
                       Expanded(
                         child: AnimatedCard(
-                          onTap: () => provider.setBottomNavIndex(2),
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const FeesScreen()));
+                          },
                           padding: const EdgeInsets.all(14),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -393,7 +513,96 @@ class HomeScreen extends StatelessWidget {
                                 fee.pendingAmount == 0
                                     ? 'All Fees Settled'
                                     : 'Pending: ${CurrencyFormatter.formatINR(fee.pendingAmount)}',
+                                style: AppTextStyles.caption.copyWith(
+                                  color: fee.pendingAmount == 0 ? AppColors.success : AppColors.warning,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                fee.dueDate != null ? 'Due ${DateFormatter.formatShort(fee.dueDate!)}' : 'Session 2026-27',
+                                style: AppTextStyles.caption.copyWith(fontSize: 10, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Row 2: Homework & Schedule
+                  Row(
+                    children: [
+                      // Homework Status Card
+                      Expanded(
+                        child: AnimatedCard(
+                          onTap: () => provider.setBottomNavIndex(2),
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Icon(Icons.assignment_outlined, color: AppColors.warning, size: 20),
+                                  StatusBadge(
+                                    label: pendingHwCount == 0 ? 'DONE' : '$pendingHwCount DUE',
+                                    type: pendingHwCount == 0 ? StatusType.success : StatusType.warning,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text('Homework', style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
+                              const SizedBox(height: 2),
+                              Text(
+                                pendingHwCount == 0
+                                    ? 'All tasks completed!'
+                                    : '${homeworkList.where((h) => !h.isCompleted).first.subject}: ${homeworkList.where((h) => !h.isCompleted).first.title}',
                                 style: AppTextStyles.caption,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 12),
+
+                      // Timetable Period Card
+                      Expanded(
+                        child: AnimatedCard(
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const TimetableScreen()));
+                          },
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Icon(Icons.schedule_rounded, color: Color(0xFF06B6D4), size: 20),
+                                  StatusBadge(
+                                    label: 'ROUTINE',
+                                    type: StatusType.info,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Text('Schedule', style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
+                              const SizedBox(height: 2),
+                              Text(
+                                nextClass != null
+                                    ? '${nextClass.subject} (${nextClass.startTime})'
+                                    : 'View class timetable',
+                                style: AppTextStyles.caption,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
@@ -408,10 +617,13 @@ class HomeScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Latest Notices', style: AppTextStyles.headingSmall),
+                      Text('Latest School Notices', style: AppTextStyles.headingSmall),
                       GestureDetector(
                         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NoticesScreen())),
-                        child: Text('View All', style: AppTextStyles.caption.copyWith(color: AppColors.brandIndigo, fontWeight: FontWeight.bold)),
+                        child: Text(
+                          'View All',
+                          style: AppTextStyles.caption.copyWith(color: AppColors.brandIndigo, fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ),
@@ -427,7 +639,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                       child: Center(
                         child: Text(
-                          'No new notices.',
+                          'No new notices at this time.',
                           style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
                         ),
                       ),
@@ -486,4 +698,18 @@ class HomeScreen extends StatelessWidget {
       ],
     );
   }
+}
+
+class _QuickActionData {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickActionData({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
 }

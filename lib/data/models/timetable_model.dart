@@ -14,9 +14,9 @@ class TimetableEntryModel {
 
   const TimetableEntryModel({
     this.id = '',
-    this.schoolId = 'SCH-STX-2026',
-    this.className = '8-A',
-    this.section = 'A',
+    this.schoolId = '',
+    this.className = '',
+    this.section = '',
     required this.dayOfWeek,
     required this.startTime,
     required this.endTime,
@@ -33,7 +33,7 @@ class TimetableEntryModel {
 
     return TimetableEntryModel(
       id: map['id'] ?? 'TT-${DateTime.now().millisecondsSinceEpoch}',
-      schoolId: map['school_id'] ?? 'SCH-STX-2026',
+      schoolId: map['school_id'] ?? '',
       className: map['class_name'] ?? map['class'] ?? '8-A',
       section: map['section'] ?? 'A',
       dayOfWeek: cleanDay,

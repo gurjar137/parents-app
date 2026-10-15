@@ -9,7 +9,6 @@ import '../data/models/result_model.dart';
 import '../data/models/timetable_model.dart';
 import '../data/models/notice_model.dart';
 import '../data/models/notification_model.dart';
-import '../data/models/ptm_access_code.dart';
 import '../data/models/exam_model.dart';
 import '../data/models/ptm_model.dart';
 import '../data/models/document_model.dart';
@@ -29,6 +28,7 @@ import '../core/services/fee_service.dart';
 import '../core/services/notice_service.dart';
 import '../core/services/notification_service.dart';
 import '../core/services/link_child_service.dart';
+import '../core/services/school_service.dart';
 import '../core/services/supabase_service.dart';
 import '../core/utils/currency_formatter.dart';
 import '../core/utils/date_formatter.dart';
@@ -38,6 +38,7 @@ class ParentAppProvider extends ChangeNotifier {
   late List<StudentModel> _children;
   StudentModel? _selectedChild;
   late SchoolBrandModel _branding;
+  int _currentChildLoadToken = 0;
 
   // Authentication & Session State
   bool _isLoggedIn = false;
@@ -102,7 +103,7 @@ class ParentAppProvider extends ChangeNotifier {
   }
 
   void _init() {
-    _branding = MockData.defaultBranding;
+    _branding = SchoolBrandModel.defaultNeutral();
     _parent = const ParentModel(
       id: '',
       name: '',
@@ -166,12 +167,30 @@ class ParentAppProvider extends ChangeNotifier {
   int get attendanceYear => _attendanceYear;
   int get attendanceMonth => _attendanceMonth;
 
+  Future<void> _loadSchoolBrandingForChild(StudentModel child) async {
+    final token = _currentChildLoadToken;
+    final targetSchoolId = child.schoolId;
+    if (targetSchoolId.isNotEmpty) {
+      final brand = await SchoolService.fetchSchoolBrand(targetSchoolId);
+      if (_currentChildLoadToken == token && _selectedChild?.schoolId == targetSchoolId) {
+        _branding = brand;
+        notifyListeners();
+      }
+    } else {
+      _branding = SchoolBrandModel.defaultNeutral();
+      notifyListeners();
+    }
+  }
+
   Future<void> loadNotificationsForSelectedChild() async {
     if (_selectedChild == null) {
       _isNotificationsLoading = false;
       notifyListeners();
       return;
     }
+    final token = _currentChildLoadToken;
+    final studentId = _selectedChild!.id;
+
     _isNotificationsLoading = true;
     _notificationsError = null;
     notifyListeners();
@@ -186,9 +205,11 @@ class ParentAppProvider extends ChangeNotifier {
         schoolId: _selectedChild!.schoolId,
         studentId: _selectedChild!.id,
       );
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _activeNotificationsList = list;
       _notificationsError = null;
     } catch (e) {
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _notificationsError = 'Unable to load notifications. Please try again.';
     }
 
@@ -197,7 +218,7 @@ class ParentAppProvider extends ChangeNotifier {
   }
 
   Future<void> markAppNotificationAsRead(String notificationId) async {
-    _activeNotificationsList ??= List.from(MockData.notifications);
+    _activeNotificationsList ??= [];
     final index = _activeNotificationsList!.indexWhere((n) => n.id == notificationId);
     if (index != -1 && !_activeNotificationsList![index].isRead) {
       _activeNotificationsList![index] = _activeNotificationsList![index].copyWith(isRead: true);
@@ -215,6 +236,9 @@ class ParentAppProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final token = _currentChildLoadToken;
+    final studentId = _selectedChild!.id;
+
     _isNoticesLoading = true;
     _noticesError = null;
     notifyListeners();
@@ -225,9 +249,11 @@ class ParentAppProvider extends ChangeNotifier {
         className: _selectedChild!.className,
         studentId: _selectedChild!.id,
       );
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _activeNoticesList = list;
       _noticesError = null;
     } catch (e) {
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _noticesError = 'Unable to load notices. Please try again.';
     }
 
@@ -236,7 +262,7 @@ class ParentAppProvider extends ChangeNotifier {
   }
 
   Future<void> markNoticeAsRead(String noticeId) async {
-    _activeNoticesList ??= List.from(MockData.notices);
+    _activeNoticesList ??= [];
     final index = _activeNoticesList!.indexWhere((n) => n.id == noticeId);
     if (index != -1 && !_activeNoticesList![index].isRead) {
       _activeNoticesList![index] = _activeNoticesList![index].copyWith(isRead: true);
@@ -251,6 +277,9 @@ class ParentAppProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final token = _currentChildLoadToken;
+    final studentId = _selectedChild!.id;
+
     _isFeesLoading = true;
     _feesError = null;
     notifyListeners();
@@ -266,9 +295,11 @@ class ParentAppProvider extends ChangeNotifier {
         academicYearId: _selectedChild!.academicYear,
         parentAccessCode: parentCode,
       );
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _activeFeeSummary = summary;
       _feesError = null;
     } catch (e) {
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _feesError = 'Unable to load fee details. Please try again.';
     }
 
@@ -282,6 +313,9 @@ class ParentAppProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final token = _currentChildLoadToken;
+    final studentId = _selectedChild!.id;
+
     _isResultsLoading = true;
     _resultsError = null;
     notifyListeners();
@@ -291,9 +325,11 @@ class ParentAppProvider extends ChangeNotifier {
         studentId: _selectedChild!.id,
         schoolId: _selectedChild!.schoolId,
       );
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _activeResultsList = list;
       _resultsError = null;
     } catch (e) {
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _resultsError = 'Unable to load examination results. Please try again.';
     }
 
@@ -307,6 +343,9 @@ class ParentAppProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final token = _currentChildLoadToken;
+    final studentId = _selectedChild!.id;
+
     _isTimetableLoading = true;
     _timetableError = null;
     notifyListeners();
@@ -318,9 +357,11 @@ class ParentAppProvider extends ChangeNotifier {
         section: _selectedChild!.section,
         studentId: _selectedChild!.id,
       );
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _activeTimetableList = list;
       _timetableError = null;
     } catch (e) {
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _timetableError = 'Unable to load timetable. Please try again.';
     }
 
@@ -334,6 +375,9 @@ class ParentAppProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final token = _currentChildLoadToken;
+    final studentId = _selectedChild!.id;
+
     _isHomeworkLoading = true;
     _homeworkError = null;
     notifyListeners();
@@ -344,9 +388,11 @@ class ParentAppProvider extends ChangeNotifier {
         className: _selectedChild!.className,
         schoolId: _selectedChild!.schoolId,
       );
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _activeHomeworkList = list;
       _homeworkError = null;
     } catch (e) {
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _homeworkError = 'Unable to load homework. Please try again.';
     }
 
@@ -360,20 +406,28 @@ class ParentAppProvider extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    final token = _currentChildLoadToken;
+    final studentId = _selectedChild!.id;
+
     _isAttendanceLoading = true;
     _attendanceError = null;
     notifyListeners();
 
     try {
       final summary = await AttendanceService.fetchAttendanceForStudent(
-        studentId: _selectedChild!.id,
+        studentId: studentId,
         year: _attendanceYear,
         month: _attendanceMonth,
       );
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _activeAttendanceSummary = summary;
-      _todayAttendance = await AttendanceService.fetchTodayAttendance(studentId: _selectedChild!.id);
+
+      final today = await AttendanceService.fetchTodayAttendance(studentId: studentId);
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
+      _todayAttendance = today;
       _attendanceError = null;
     } catch (e) {
+      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
       _attendanceError = 'Unable to load attendance. Please try again.';
     }
 
@@ -421,8 +475,8 @@ class ParentAppProvider extends ChangeNotifier {
     section: '',
     rollNo: 0,
     admissionNo: '',
-    schoolId: 'SCH-STX-2026',
-    fatherName: '',
+    schoolId: '',
+    fatherName: null,
     academicYear: '2026-2027',
     avatarUrl: '',
     classTeacher: '',
@@ -440,13 +494,17 @@ class ParentAppProvider extends ChangeNotifier {
   String get currentFatherName {
     if (_selectedChild != null &&
         _selectedChild!.fatherName != null &&
-        _selectedChild!.fatherName!.isNotEmpty) {
-      return _selectedChild!.fatherName!;
+        _selectedChild!.fatherName!.trim().isNotEmpty &&
+        _selectedChild!.fatherName!.trim().toLowerCase() != 'null') {
+      return _selectedChild!.fatherName!.trim();
     }
-    if (_parent.name.isNotEmpty &&
+    if (_parent.relationship.toLowerCase().contains('father') &&
+        _parent.name.trim().isNotEmpty &&
         _parent.name != 'Parent User' &&
-        _parent.name != 'Dharampal Sharma') {
-      return _parent.name;
+        _parent.name != 'Parent' &&
+        _parent.name != 'Dharampal Sharma' &&
+        _parent.name != 'Rajesh Sharma') {
+      return _parent.name.trim();
     }
     return '';
   }
@@ -473,6 +531,7 @@ class ParentAppProvider extends ChangeNotifier {
           if (authRes.children != null && authRes.children!.isNotEmpty) {
             _children = List.from(authRes.children!);
             _selectedChild = _children.first;
+            _loadSchoolBrandingForChild(_selectedChild!);
             loadAttendanceForSelectedChild();
             loadHomeworkForSelectedChild();
             loadTimetableForSelectedChild();
@@ -501,6 +560,14 @@ class ParentAppProvider extends ChangeNotifier {
           _children = await LinkChildService.fetchLinkedStudentsForParent(user.id);
           if (_children.isNotEmpty) {
             _selectedChild = _children.first;
+            _loadSchoolBrandingForChild(_selectedChild!);
+            loadAttendanceForSelectedChild();
+            loadHomeworkForSelectedChild();
+            loadTimetableForSelectedChild();
+            loadFeeSummaryForSelectedChild();
+            loadResultsForSelectedChild();
+            loadNoticesForSelectedChild();
+            loadNotificationsForSelectedChild();
           } else {
             _selectedChild = null;
           }
@@ -554,8 +621,7 @@ class ParentAppProvider extends ChangeNotifier {
         );
       }
       _children.add(newStudent);
-      _selectedChild = newStudent;
-      notifyListeners();
+      selectChild(newStudent);
     }
 
     return response;
@@ -574,7 +640,9 @@ class ParentAppProvider extends ChangeNotifier {
       if (response.children != null && response.children!.isNotEmpty) {
         _children = List.from(response.children!);
         _selectedChild = _children.first;
+        _currentChildLoadToken++;
 
+        _loadSchoolBrandingForChild(_selectedChild!);
         loadAttendanceForSelectedChild();
         loadHomeworkForSelectedChild();
         loadTimetableForSelectedChild();
@@ -585,12 +653,14 @@ class ParentAppProvider extends ChangeNotifier {
       } else {
         _children = [];
         _selectedChild = null;
+        _branding = SchoolBrandModel.defaultNeutral();
       }
       _isLoggedIn = true;
       _authError = null;
     } else {
       _children = [];
       _selectedChild = null;
+      _branding = SchoolBrandModel.defaultNeutral();
       _authError = response.errorMessage;
     }
 
@@ -616,12 +686,29 @@ class ParentAppProvider extends ChangeNotifier {
     if (response.status == AuthStatus.success && response.parent != null) {
       _parent = response.parent!;
       if (response.children != null && response.children!.isNotEmpty) {
-        _children = response.children!;
+        _children = List.from(response.children!);
         _selectedChild = _children.first;
+        _currentChildLoadToken++;
+
+        _loadSchoolBrandingForChild(_selectedChild!);
+        loadAttendanceForSelectedChild();
+        loadHomeworkForSelectedChild();
+        loadTimetableForSelectedChild();
+        loadFeeSummaryForSelectedChild();
+        loadResultsForSelectedChild();
+        loadNoticesForSelectedChild();
+        loadNotificationsForSelectedChild();
+      } else {
+        _children = [];
+        _selectedChild = null;
+        _branding = SchoolBrandModel.defaultNeutral();
       }
       _isLoggedIn = true;
       _authError = null;
     } else {
+      _children = [];
+      _selectedChild = null;
+      _branding = SchoolBrandModel.defaultNeutral();
       _authError = response.errorMessage;
     }
 
@@ -653,12 +740,29 @@ class ParentAppProvider extends ChangeNotifier {
     if (response.status == AuthStatus.success && response.parent != null) {
       _parent = response.parent!;
       if (response.children != null && response.children!.isNotEmpty) {
-        _children = response.children!;
+        _children = List.from(response.children!);
         _selectedChild = _children.first;
+        _currentChildLoadToken++;
+
+        _loadSchoolBrandingForChild(_selectedChild!);
+        loadAttendanceForSelectedChild();
+        loadHomeworkForSelectedChild();
+        loadTimetableForSelectedChild();
+        loadFeeSummaryForSelectedChild();
+        loadResultsForSelectedChild();
+        loadNoticesForSelectedChild();
+        loadNotificationsForSelectedChild();
+      } else {
+        _children = [];
+        _selectedChild = null;
+        _branding = SchoolBrandModel.defaultNeutral();
       }
       _isLoggedIn = true;
       _authError = null;
     } else {
+      _children = [];
+      _selectedChild = null;
+      _branding = SchoolBrandModel.defaultNeutral();
       _authError = response.errorMessage;
     }
 
@@ -703,11 +807,14 @@ class ParentAppProvider extends ChangeNotifier {
 
   // Parent Logout & Secure State Clear
   Future<void> logout() async {
+    _currentChildLoadToken++;
     await AuthService.clearSession();
+    SchoolService.clearCache();
     _isLoggedIn = false;
     _children = [];
     _selectedChild = null;
     _selectedBottomNavIndex = 0;
+    _branding = SchoolBrandModel.defaultNeutral();
 
     // Reset module caches to prevent data leakage on account switching
     _todayAttendance = null;
@@ -739,6 +846,18 @@ class ParentAppProvider extends ChangeNotifier {
   void selectChild(StudentModel child) {
     if (_selectedChild == null || _selectedChild!.id != child.id) {
       _selectedChild = child;
+      _currentChildLoadToken++;
+
+      // Immediately clear previous child's cached datasets to prevent race-condition data leaks
+      _todayAttendance = null;
+      _activeAttendanceSummary = null;
+      _activeHomeworkList = null;
+      _activeTimetableList = null;
+      _activeResultsList = null;
+      _activeFeeSummary = null;
+      _activeNoticesList = null;
+      _activeNotificationsList = null;
+
       _aiMessages = [
         AiMessageModel(
           id: 'AI-SWITCH-${DateTime.now().millisecondsSinceEpoch}',
@@ -747,6 +866,7 @@ class ParentAppProvider extends ChangeNotifier {
           timestamp: DateTime.now(),
         ),
       ];
+      _loadSchoolBrandingForChild(child);
       loadAttendanceForSelectedChild();
       loadHomeworkForSelectedChild();
       loadTimetableForSelectedChild();
@@ -771,27 +891,6 @@ class ParentAppProvider extends ChangeNotifier {
     _lastUpdatedTime = 'Just now';
     _isRefreshing = false;
     notifyListeners();
-  }
-
-  // PTM Access Code Linking Flow
-  PtmAccessCodeModel? validatePtmCode(String code) {
-    final cleanCode = code.trim().toUpperCase();
-    final match = MockData.availablePtmCodes.where((c) => c.code == cleanCode).toList();
-    if (match.isNotEmpty && !match.first.isUsed) {
-      return match.first;
-    }
-    return null;
-  }
-
-  bool confirmLinkChild(PtmAccessCodeModel codeModel) {
-    final newStudent = codeModel.studentPreview;
-    if (!_children.any((s) => s.id == newStudent.id)) {
-      _children.add(newStudent);
-      _selectedChild = newStudent;
-      notifyListeners();
-      return true;
-    }
-    return false;
   }
 
   // Child-Specific Data Getters

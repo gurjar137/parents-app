@@ -90,7 +90,7 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          widget.isFirstTimeSetup ? 'School Setup' : 'Link Child',
+          widget.isFirstTimeSetup ? 'Access Code Verification' : 'Verify & Link Child',
           style: AppTextStyles.headingSmall,
         ),
         elevation: 0,
@@ -102,10 +102,10 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Link Your Child 🎓', style: AppTextStyles.headingLarge.copyWith(fontSize: 24)),
+              Text('Access Code Verification 🎓', style: AppTextStyles.headingLarge.copyWith(fontSize: 24)),
               const SizedBox(height: 8),
               Text(
-                'Enter the unique Student ID or Parent Linking Code provided by ${branding.schoolName} to securely connect your child\'s profile.',
+                'Enter the unique Parent Access Code provided by ${branding.schoolName} to securely link and access your child\'s records.',
                 style: AppTextStyles.bodyMedium,
               ),
 
@@ -256,7 +256,7 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Your school admin provides a unique Parent Linking Code or Student ID (e.g. STU-2026-00125 or SC-7K4P-92MX). Enter it above to establish authorized student access.',
+                      'Your school admin provides a unique Parent Access Code (e.g. SC-Y8PV-UQ29). Enter it above to establish authorized student access.',
                       style: AppTextStyles.caption,
                     ),
                   ],

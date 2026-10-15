@@ -52,7 +52,7 @@ class ExamResultModel {
   const ExamResultModel({
     required this.id,
     required this.studentId,
-    this.schoolId = 'SCH-STX-2026',
+    this.schoolId = '',
     required this.examName,
     this.academicSession = '2026-2027',
     required this.examDate,
@@ -89,7 +89,7 @@ class ExamResultModel {
     return ExamResultModel(
       id: map['id'] ?? map['exam_id'] ?? 'EXAM-${DateTime.now().millisecondsSinceEpoch}',
       studentId: map['student_id'] ?? fallbackStudentId,
-      schoolId: map['school_id'] ?? 'SCH-STX-2026',
+      schoolId: map['school_id'] ?? '',
       examName: map['exam_name'] ?? map['name'] ?? 'Term Examination',
       academicSession: map['academic_session'] ?? map['session'] ?? '2026-2027',
       examDate: parseDate(map['exam_date'] ?? map['created_at']),

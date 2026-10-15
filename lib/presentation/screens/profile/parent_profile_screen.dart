@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../providers/parent_app_provider.dart';
 import '../../widgets/animated_card.dart';
-import '../../widgets/link_child_modal.dart';
 import '../notifications/notifications_screen.dart';
+import '../auth/link_child_screen.dart';
+import '../auth/parent_login_screen.dart';
 import 'child_profile_screen.dart';
 
 class ParentProfileScreen extends StatefulWidget {
@@ -96,7 +96,12 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
                 TextButton.icon(
                   icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
                   label: const Text('+ Link Another Child'),
-                  onPressed: () => LinkChildModal.show(context),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LinkChildScreen()),
+                    );
+                  },
                 ),
               ],
             ),
@@ -197,8 +202,8 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
             _buildOptionTile(
               icon: Icons.school_outlined,
               title: 'School Information',
-              subtitle: AppConstants.schoolName,
-              onTap: () => _showSchoolInfoDialog(context),
+              subtitle: provider.branding.schoolName,
+              onTap: () => _showSchoolInfoDialog(context, provider),
             ),
             _buildOptionTile(
               icon: Icons.info_outline_rounded,
@@ -437,23 +442,24 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
     );
   }
 
-  void _showSchoolInfoDialog(BuildContext context) {
+  void _showSchoolInfoDialog(BuildContext context, ParentAppProvider provider) {
+    final branding = provider.branding;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(AppConstants.schoolName, style: AppTextStyles.headingSmall),
+        title: Text(branding.schoolName, style: AppTextStyles.headingSmall),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Address: ${AppConstants.schoolAddress}', style: AppTextStyles.bodyMedium),
+            Text('Address: ${branding.address.isNotEmpty ? branding.address : "Not provided"}', style: AppTextStyles.bodyMedium),
             const SizedBox(height: 8),
-            Text('Phone: ${AppConstants.schoolPhone}', style: AppTextStyles.bodyMedium),
+            Text('Phone: ${branding.phone.isNotEmpty ? branding.phone : "Not provided"}', style: AppTextStyles.bodyMedium),
             const SizedBox(height: 8),
-            Text('Email: ${AppConstants.schoolEmail}', style: AppTextStyles.bodyMedium),
+            Text('Email: ${branding.email.isNotEmpty ? branding.email : "Not provided"}', style: AppTextStyles.bodyMedium),
             const SizedBox(height: 8),
-            Text('Affiliation Code: ${AppConstants.schoolCode}', style: AppTextStyles.bodyMedium),
+            Text('Affiliation Code: ${branding.affiliation.isNotEmpty ? branding.affiliation : "Not provided"}', style: AppTextStyles.bodyMedium),
           ],
         ),
         actions: [
@@ -532,12 +538,16 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              if (Navigator.canPop(context)) {
-                Navigator.pop(context);
+              final provider = Provider.of<ParentAppProvider>(context, listen: false);
+              await provider.logout();
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const ParentLoginScreen()),
+                  (route) => false,
+                );
               }
-              Provider.of<ParentAppProvider>(context, listen: false).logout();
             },
             child: const Text('Logout'),
           ),

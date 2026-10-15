@@ -64,6 +64,19 @@ class LinkChildService {
         if (studentRes != null) {
           final student = StudentModel.fromMap(studentRes, studentRes['id'] ?? cleanCode);
 
+          final currentUser = SupabaseService.client.auth.currentUser;
+          if (currentUser != null && student.id.isNotEmpty) {
+            try {
+              await SupabaseService.client.from('parent_students').upsert({
+                'parent_id': currentUser.id,
+                'student_id': student.id,
+                'relationship': relationship,
+              }, onConflict: 'parent_id,student_id');
+            } catch (e) {
+              if (kDebugMode) debugPrint('[LinkChildService] parent_students upsert notice: $e');
+            }
+          }
+
           return LinkChildResponse(
             status: LinkStatus.success,
             student: student,

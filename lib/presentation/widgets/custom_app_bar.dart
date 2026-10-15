@@ -5,6 +5,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/greeting_helper.dart';
 import '../../providers/parent_app_provider.dart';
 import '../screens/notifications/notifications_screen.dart';
+import '../screens/profile/parent_profile_screen.dart';
 import 'child_selector_sheet.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -29,13 +30,21 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: AppColors.brandIndigo,
-              backgroundImage: NetworkImage(parent.avatarUrl),
-              child: Text(
-                fatherName.isNotEmpty ? fatherName[0] : 'P',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ParentProfileScreen()),
+                );
+              },
+              child: CircleAvatar(
+                radius: 20,
+                backgroundColor: AppColors.brandIndigo,
+                backgroundImage: NetworkImage(parent.avatarUrl),
+                child: Text(
+                  fatherName.isNotEmpty ? fatherName[0] : 'P',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             const SizedBox(width: 12),

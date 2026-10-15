@@ -7,9 +7,9 @@ import '../../../providers/parent_app_provider.dart';
 import '../../widgets/animated_card.dart';
 import '../../widgets/correction_request_dialog.dart';
 import '../../widgets/stat_row.dart';
-import '../results/results_screen.dart';
 import '../timetable/timetable_screen.dart';
 import '../notices/notices_screen.dart';
+import '../fees/fees_screen.dart';
 
 class ChildProfileScreen extends StatelessWidget {
   final StudentModel student;
@@ -40,6 +40,12 @@ class ChildProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(student.name, style: AppTextStyles.headingLarge),
+                  const SizedBox(height: 4),
+                  Text(
+                    provider.branding.schoolName,
+                    style: AppTextStyles.caption.copyWith(color: AppColors.brandIndigo, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
                   Text(
                     '${student.grade} (${student.className}) • Roll No. ${student.rollNo}',
                     style: AppTextStyles.bodyMedium,
@@ -69,7 +75,11 @@ class ChildProfileScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 8),
+                  StatRow(label: 'School:', value: provider.branding.schoolName),
                   StatRow(label: 'Admission Number:', value: student.admissionNo),
+                  StatRow(label: "Father's Name:", value: student.displayFatherName),
+                  if (student.motherName != null && student.motherName!.trim().isNotEmpty)
+                    StatRow(label: "Mother's Name:", value: student.motherName!.trim()),
                   StatRow(label: 'Academic Session:', value: student.academicYear),
                   StatRow(label: 'Class Teacher:', value: student.classTeacher),
                   StatRow(label: 'House Name:', value: student.houseName),
@@ -108,7 +118,7 @@ class ChildProfileScreen extends StatelessWidget {
                   color: AppColors.warning,
                   onTap: () {
                     provider.selectChild(student);
-                    provider.setBottomNavIndex(1); // Academics tab
+                    provider.setBottomNavIndex(2); // Homework tab
                     Navigator.pop(context);
                   },
                 ),
@@ -118,8 +128,7 @@ class ChildProfileScreen extends StatelessWidget {
                   color: AppColors.brandBlue,
                   onTap: () {
                     provider.selectChild(student);
-                    provider.setBottomNavIndex(2); // Fees tab
-                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const FeesScreen()));
                   },
                 ),
                 _buildQuickTile(
@@ -128,7 +137,8 @@ class ChildProfileScreen extends StatelessWidget {
                   color: AppColors.holiday,
                   onTap: () {
                     provider.selectChild(student);
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ResultsScreen()));
+                    provider.setBottomNavIndex(3); // Results tab
+                    Navigator.pop(context);
                   },
                 ),
                 _buildQuickTile(

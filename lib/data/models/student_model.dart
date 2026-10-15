@@ -2,6 +2,7 @@ class StudentModel {
   final String id;
   final String name;
   final String? fatherName;
+  final String? motherName;
   final String className; // e.g. "8-A" or "5-B"
   final String grade; // e.g. "Class 8"
   final String section; // e.g. "A"
@@ -18,7 +19,8 @@ class StudentModel {
   const StudentModel({
     required this.id,
     required this.name,
-    this.fatherName = 'Rajesh Sharma',
+    this.fatherName,
+    this.motherName,
     required this.className,
     required this.grade,
     required this.section,
@@ -29,24 +31,48 @@ class StudentModel {
     required this.houseName,
     required this.classTeacher,
     required this.classmateCount,
-    this.schoolId = 'SCH-STX-2026',
+    this.schoolId = '',
     this.linkingCode,
   });
+
+  /// Formatted father's name with standard 'Not provided' fallback
+  String get displayFatherName {
+    if (fatherName != null &&
+        fatherName!.trim().isNotEmpty &&
+        fatherName!.trim().toLowerCase() != 'null') {
+      return fatherName!.trim();
+    }
+    return 'Not provided';
+  }
 
   factory StudentModel.fromMap(Map<String, dynamic> map, String fallbackId) {
     final gradeStr = map['grade'] ?? map['class'] ?? 'Class 8';
     final sectionStr = map['section'] ?? 'A';
     final computedClassName = map['class_name'] ?? '$gradeStr-$sectionStr';
 
+    final rawFather = map['father_name'] ??
+        map['father_full_name'] ??
+        map['fatherName'];
+    final cleanFather = (rawFather != null &&
+            rawFather.toString().trim().isNotEmpty &&
+            rawFather.toString().trim().toLowerCase() != 'null')
+        ? rawFather.toString().trim()
+        : null;
+
+    final rawMother = map['mother_name'] ??
+        map['mother_full_name'] ??
+        map['motherName'];
+    final cleanMother = (rawMother != null &&
+            rawMother.toString().trim().isNotEmpty &&
+            rawMother.toString().trim().toLowerCase() != 'null')
+        ? rawMother.toString().trim()
+        : null;
+
     return StudentModel(
       id: map['id'] ?? map['student_id'] ?? fallbackId,
       name: map['name'] ?? map['full_name'] ?? map['student_name'] ?? 'Student',
-      fatherName: map['father_name'] ??
-          map['father_full_name'] ??
-          map['parent_name'] ??
-          map['guardian_name'] ??
-          map['fatherName'] ??
-          'Rajesh Sharma',
+      fatherName: cleanFather,
+      motherName: cleanMother,
       className: computedClassName,
       grade: gradeStr,
       section: sectionStr,
@@ -62,7 +88,7 @@ class StudentModel {
       classmateCount: map['classmate_count'] is int
           ? map['classmate_count']
           : int.tryParse(map['classmate_count']?.toString() ?? '34') ?? 34,
-      schoolId: map['school_id'] ?? 'SCH-STX-2026',
+      schoolId: (map['school_id'] ?? '').toString(),
       linkingCode: map['linking_code'] ?? map['parent_linking_code'] ?? map['access_code'],
     );
   }
@@ -72,6 +98,7 @@ class StudentModel {
       'id': id,
       'name': name,
       'father_name': fatherName,
+      'mother_name': motherName,
       'class_name': className,
       'grade': grade,
       'section': section,

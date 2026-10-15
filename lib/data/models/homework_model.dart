@@ -17,8 +17,8 @@ class HomeworkModel {
   HomeworkModel({
     required this.id,
     required this.studentId,
-    this.schoolId = 'SCH-STX-2026',
-    this.className = '8-A',
+    this.schoolId = '',
+    this.className = '',
     required this.subject,
     required this.title,
     required this.description,
@@ -56,8 +56,8 @@ class HomeworkModel {
     return HomeworkModel(
       id: map['id'] ?? map['homework_id'] ?? 'HW-${DateTime.now().millisecondsSinceEpoch}',
       studentId: map['student_id'] ?? fallbackStudentId,
-      schoolId: map['school_id'] ?? 'SCH-STX-2026',
-      className: map['class_name'] ?? map['class'] ?? '8-A',
+      schoolId: map['school_id'] ?? '',
+      className: map['class_name'] ?? map['class'] ?? '',
       subject: map['subject'] ?? map['subject_name'] ?? 'General',
       title: map['title'] ?? map['topic'] ?? 'Homework Assignment',
       description: map['description'] ?? map['instructions'] ?? '',

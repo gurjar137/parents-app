@@ -79,6 +79,7 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sessionKey);
     await prefs.remove(_codeKey);
+    await prefs.clear();
   }
 
   /// Connect Admin-Generated Unique Parent Access Code (public.students.parent_access_code) to Parent App Login
@@ -144,13 +145,22 @@ class AuthService {
         final className = (studentRes['class_name'] ?? '12').toString();
         final sectionName = (studentRes['section_name'] ?? studentRes['section'] ?? 'a').toString();
 
+        final rawFather = (studentRes['father_name'] ??
+                studentRes['father_full_name'] ??
+                studentRes['fatherName'])
+            ?.toString()
+            .trim();
+        final cleanFather = (rawFather != null &&
+                rawFather.isNotEmpty &&
+                rawFather.toLowerCase() != 'null')
+            ? rawFather
+            : null;
+        final resolvedSchoolId = (studentRes['school_id'] ?? '').toString();
+
         final student = StudentModel(
           id: (studentRes['id'] ?? normalizedCode).toString(),
           name: computedName,
-          fatherName: studentRes['father_name']?.toString() ??
-              studentRes['guardian_name']?.toString() ??
-              studentRes['mother_name']?.toString() ??
-              'Father / Guardian',
+          fatherName: cleanFather,
           className: '$className-$sectionName',
           grade: className.startsWith('Class') ? className : 'Class $className',
           section: sectionName,
@@ -161,19 +171,19 @@ class AuthService {
           houseName: (studentRes['house_name'] ?? 'Tagore House (Blue)').toString(),
           classTeacher: (studentRes['class_teacher'] ?? 'Class Teacher').toString(),
           classmateCount: int.tryParse((studentRes['classmate_count'] ?? '35').toString()) ?? 35,
-          schoolId: (studentRes['school_id'] ?? 'SCH-STX-2026').toString(),
+          schoolId: resolvedSchoolId,
           linkingCode: (studentRes['parent_access_code'] ?? normalizedCode).toString(),
         );
 
-        final fatherName = student.fatherName ?? 'Father / Guardian';
+        final fatherDisplayName = cleanFather ?? 'Parent / Guardian';
         final parentId = 'P-${student.id}';
         final parent = ParentModel(
           id: parentId,
-          name: fatherName,
+          name: fatherDisplayName,
           email: studentRes['email'] ?? studentRes['parent_email'] ?? '',
           phone: studentRes['phone'] ?? studentRes['father_phone'] ?? '',
           avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=300&h=300',
-          relationship: 'Father / Guardian',
+          relationship: cleanFather != null ? 'Father' : 'Parent / Guardian',
           status: 'active',
           schoolId: student.schoolId,
           childrenIds: [student.id],

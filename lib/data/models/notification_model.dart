@@ -12,7 +12,7 @@ class AppNotificationModel {
 
   const AppNotificationModel({
     required this.id,
-    this.schoolId = 'SCH-STX-2026',
+    this.schoolId = '',
     this.studentId,
     required this.title,
     required this.message,
@@ -66,7 +66,7 @@ class AppNotificationModel {
 
     return AppNotificationModel(
       id: map['id'] ?? map['notification_id'] ?? 'NOTIF-${DateTime.now().millisecondsSinceEpoch}',
-      schoolId: map['school_id'] ?? 'SCH-STX-2026',
+      schoolId: map['school_id'] ?? '',
       studentId: map['student_id'],
       title: map['title'] ?? 'School Alert',
       message: map['message'] ?? map['body'] ?? '',

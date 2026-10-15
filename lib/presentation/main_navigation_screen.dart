@@ -4,9 +4,9 @@ import '../core/theme/app_colors.dart';
 import '../providers/parent_app_provider.dart';
 import 'widgets/custom_app_bar.dart';
 import 'screens/home/home_screen.dart';
-import 'screens/academics/academics_screen.dart';
-import 'screens/fees/fees_screen.dart';
-import 'screens/messages/messages_screen.dart';
+import 'screens/attendance/attendance_screen.dart';
+import 'screens/homework/homework_screen.dart';
+import 'screens/results/results_screen.dart';
 import 'screens/more/more_screen.dart';
 
 class MainNavigationScreen extends StatelessWidget {
@@ -14,9 +14,9 @@ class MainNavigationScreen extends StatelessWidget {
 
   final List<Widget> _pages = const [
     HomeScreen(),
-    AcademicsScreen(),
-    FeesScreen(),
-    MessagesScreen(),
+    AttendanceScreen(),
+    HomeworkScreen(),
+    ResultsScreen(),
     MoreScreen(),
   ];
 
@@ -24,8 +24,8 @@ class MainNavigationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = Provider.of<ParentAppProvider>(context);
     final selectedIndex = provider.selectedBottomNavIndex;
-    final unreadMessages = provider.unreadMessagesCount;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pendingHwCount = provider.currentHomeworkList.where((h) => !h.isCompleted).length;
 
     return Scaffold(
       appBar: selectedIndex == 0 ? const CustomAppBar() : null,
@@ -60,33 +60,28 @@ class MainNavigationScreen extends StatelessWidget {
               label: 'Home',
             ),
             const BottomNavigationBarItem(
-              icon: Icon(Icons.school_outlined),
-              activeIcon: Icon(Icons.school_rounded),
-              label: 'Academics',
-            ),
-            const BottomNavigationBarItem(
-              icon: Icon(Icons.account_balance_wallet_outlined),
-              activeIcon: Icon(Icons.account_balance_wallet_rounded),
-              label: 'Fees',
+              icon: Icon(Icons.calendar_today_outlined),
+              activeIcon: Icon(Icons.calendar_today_rounded),
+              label: 'Attendance',
             ),
             BottomNavigationBarItem(
               icon: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const Icon(Icons.chat_bubble_outline_rounded),
-                  if (unreadMessages > 0)
+                  const Icon(Icons.assignment_outlined),
+                  if (pendingHwCount > 0)
                     Positioned(
                       top: -2,
                       right: -6,
                       child: Container(
                         padding: const EdgeInsets.all(3),
                         decoration: const BoxDecoration(
-                          color: AppColors.danger,
+                          color: AppColors.warning,
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
                         child: Text(
-                          '$unreadMessages',
+                          '$pendingHwCount',
                           style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                         ),
@@ -94,8 +89,13 @@ class MainNavigationScreen extends StatelessWidget {
                     ),
                 ],
               ),
-              activeIcon: const Icon(Icons.chat_bubble_rounded),
-              label: 'Messages',
+              activeIcon: const Icon(Icons.assignment_rounded),
+              label: 'Homework',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.school_outlined),
+              activeIcon: Icon(Icons.school_rounded),
+              label: 'Results',
             ),
             const BottomNavigationBarItem(
               icon: Icon(Icons.grid_view_outlined),
