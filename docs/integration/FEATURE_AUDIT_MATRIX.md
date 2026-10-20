@@ -12,7 +12,7 @@ the live database with real test accounts.
 
 | # | Feature | School OS side | Parents App side | Authoritative data / RPC | Authorization (server) | Status |
 |---|---|---|---|---|---|---|
-| 1 | Parent sign-in with Parent Code (21 Oct) | issue / regenerate / disable code | `ParentLoginScreen` → Edge Function `parent-code-login` → one-time token → session | `auth.users` (one family account), `10` resolve/bind → `parent_claim_child` | server only (service role); rate limited; disabled/unlinked parents refused | CODE TESTED · PENDING DEPLOYMENT (10, 11, function) |
+| 1 | Parent sign-in with Parent Code (21 Oct) | issue / regenerate / disable code | `ParentLoginScreen` → Edge Function `parent-code-login` → one-time token → session | `auth.users` (one family account), `10` resolve/bind → `parent_claim_child` | server only (service role); rate limited; disabled/unlinked parents refused | DATABASE LIVE VERIFIED (11: 11/11) · function deployed · app sign-in on a device NOT VERIFIED |
 | 2 | Old anonymous code lookup "login" | — | **removed**; replaced by row 1 | — | — | FIXED AND LIVE VERIFIED (07b/08) |
 | 3 | Anonymous student lookup by code / attendance / results | — | no longer called | `lookup_student_by_parent_access_code`, `get_parent_student_attendance`, `get_parent_student_published_results` | 07b revokes / wraps | **BLOCKER until 07b is applied** (live probe: still anon-callable) |
 | 4 | Issue / regenerate / revoke access code | Parent Access screens (`AccessService`, `ParentService.enableParentAccessForStudent`) | — | `students.parent_access_code`, school-created `parents` + `parent_students` | admin RLS (01/02) | existing · NOT VERIFIED (LIVE) |

@@ -56,8 +56,12 @@ exchanges it for a normal session, so every server check above still applies.
   devices that are already signed in, immediately.
 - A code claimed earlier by an email/password parent account cannot open that account
   (`USE_EMAIL_LOGIN`).
-- Status: **code tested** (Flutter 78 tests, function 7 tests, SQL parse) · **pending deployment** of
-  `10`, `11` run, function deploy (JWT verification off).
+- Status (21 Oct 2026): **deployed and database live verified.** `10` applied; `11` = **11 / 11 PASS**
+  (privileges, unknown code, first login, bind/adoption, repeat login, regenerated code, disabled access,
+  removed link, no takeover of an email account, non-code account refused, per-client rate limit).
+  Function `parent-code-login` deployed with JWT verification off; external probe: wrong code → 401
+  `INVALID_CODE`, malformed → 400, direct RPC call → 42501. Flutter 78 tests, function 7 tests.
+  **Not yet verified:** a successful sign-in from the app on a device with a real test code.
 
 ## Production blocker (resolved 20 Oct 2026, see above)
 Live on 21 Oct 2026, anonymous callers can execute:

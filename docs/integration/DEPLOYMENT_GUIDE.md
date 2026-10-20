@@ -59,6 +59,8 @@ select count(*) from auth.users where email like 'zz-pi-%@example.invalid';     
 ```
 
 ## 4b. Parent Code sign-in (needed for the current Parents App build)
+> **Status 21 Oct 2026:** steps 1–3 done (`10` applied, `11` 11/11 PASS, function deployed). Step 4 pending.
+
 1. SQL editor: run `database_repair/10_parent_code_login.sql`. The final check must show
    `false` / `false` for both functions.
 2. SQL editor: run `database_repair/11_parent_code_login_tests_rolled_back.sql`. Every row PASS.
