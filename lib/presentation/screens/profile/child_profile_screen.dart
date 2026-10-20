@@ -36,7 +36,12 @@ class ChildProfileScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 44,
-                    backgroundImage: NetworkImage(student.avatarUrl),
+                    backgroundColor: AppColors.brandIndigo,
+                    backgroundImage: student.avatarUrl.startsWith('http') ? NetworkImage(student.avatarUrl) : null,
+                    child: student.avatarUrl.startsWith('http')
+                        ? null
+                        : Text(student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(height: 12),
                   Text(student.name, style: AppTextStyles.headingLarge),
@@ -47,7 +52,7 @@ class ChildProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${student.grade} (${student.className}) • Roll No. ${student.rollNo}',
+                    [student.className, if (student.rollNo > 0) 'Roll No. ${student.rollNo}'].where((p) => p.isNotEmpty).join(' • '),
                     style: AppTextStyles.bodyMedium,
                   ),
                 ],
@@ -77,13 +82,16 @@ class ChildProfileScreen extends StatelessWidget {
                   const SizedBox(height: 8),
                   StatRow(label: 'School:', value: provider.branding.schoolName),
                   StatRow(label: 'Admission Number:', value: student.admissionNo),
-                  StatRow(label: "Father's Name:", value: student.displayFatherName),
+                  if (student.admissionNo.isNotEmpty) StatRow(label: 'Admission No:', value: student.admissionNo),
+                  if (student.relationship.isNotEmpty) StatRow(label: 'Your relationship:', value: student.relationship),
+                  if (student.dateOfBirth != null)
+                    StatRow(label: 'Date of Birth:', value: '${student.dateOfBirth!.day}/${student.dateOfBirth!.month}/${student.dateOfBirth!.year}'),
                   if (student.motherName != null && student.motherName!.trim().isNotEmpty)
                     StatRow(label: "Mother's Name:", value: student.motherName!.trim()),
-                  StatRow(label: 'Academic Session:', value: student.academicYear),
-                  StatRow(label: 'Class Teacher:', value: student.classTeacher),
-                  StatRow(label: 'House Name:', value: student.houseName),
-                  StatRow(label: 'Class Strength:', value: '${student.classmateCount} Students'),
+                  if (student.academicYear.isNotEmpty) StatRow(label: 'Academic Session:', value: student.academicYear),
+                  if (student.classTeacher.isNotEmpty) StatRow(label: 'Class Teacher:', value: student.classTeacher),
+                  if (student.houseName.isNotEmpty) StatRow(label: 'House Name:', value: student.houseName),
+                  if (student.classmateCount > 0) StatRow(label: 'Class Strength:', value: '${student.classmateCount} Students'),
                 ],
               ),
             ),

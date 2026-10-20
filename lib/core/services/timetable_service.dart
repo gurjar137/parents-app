@@ -1,37 +1,17 @@
-import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/timetable_model.dart';
-import 'supabase_service.dart';
+import 'parent_api.dart';
 
 class TimetableService {
-  /// Fetches live authorized timetable records for a specific student's school, class, and section
-  static Future<List<TimetableEntryModel>> fetchTimetableForStudent({
-    required String schoolId,
-    required String className,
-    required String section,
-    required String studentId,
-  }) async {
-    if (SupabaseService.isInitialized) {
-      try {
-        final List<dynamic> response = await SupabaseService.client
-            .from('timetable')
-            .select()
-            .eq('school_id', schoolId)
-            .or('class_name.eq.$className,section.eq.$section')
-            .order('period_number', ascending: true);
-
-        if (response.isNotEmpty) {
-          return response
-              .map((map) => TimetableEntryModel.fromMap(map as Map<String, dynamic>))
-              .toList();
-        }
-      } on PostgrestException catch (e) {
-        if (kDebugMode) debugPrint('[TimetableService] PostgrestException notice: ${e.message}');
-      } catch (e) {
-        if (kDebugMode) debugPrint('[TimetableService] Fetch timetable notice: $e');
-      }
-    }
-
-    return [];
+  /// Published timetable of the child's class and section in the child's
+  /// session (`parent_get_timetable`). Throws [ParentDataException] on failure.
+  static Future<List<TimetableEntryModel>> fetchTimetableForStudent({required String studentId}) async {
+    if (studentId.isEmpty) return const [];
+    final rows = await ParentApi.instance.rpcList('parent_get_timetable', {'p_student_id': studentId});
+    final entries = rows.map(TimetableEntryModel.fromMap).toList()
+      ..sort((a, b) {
+        final day = TimetableEntryModel.weekdayIndex(a.dayOfWeek).compareTo(TimetableEntryModel.weekdayIndex(b.dayOfWeek));
+        return day != 0 ? day : a.periodNumber.compareTo(b.periodNumber);
+      });
+    return entries;
   }
 }

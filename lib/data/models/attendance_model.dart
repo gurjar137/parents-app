@@ -18,14 +18,14 @@ class DailyAttendance {
   });
 
   factory DailyAttendance.fromMap(Map<String, dynamic> map) {
-    final rawStatus = (map['status'] as String? ?? 'present').toLowerCase().trim();
+    final rawStatus = (map['status'] ?? '').toString().toLowerCase().trim();
     AttendanceStatus parsedStatus;
 
     if (rawStatus == 'absent') {
       parsedStatus = AttendanceStatus.absent;
     } else if (rawStatus == 'late') {
       parsedStatus = AttendanceStatus.late;
-    } else if (rawStatus == 'leave') {
+    } else if (rawStatus == 'leave' || rawStatus == 'excused' || rawStatus == 'on_leave') {
       parsedStatus = AttendanceStatus.leave;
     } else if (rawStatus == 'holiday') {
       parsedStatus = AttendanceStatus.holiday;
@@ -76,6 +76,8 @@ class MonthlyAttendanceSummary {
   final double percentage;
   final List<DailyAttendance> dailyRecords;
 
+  bool get hasRecords => totalWorkingDays > 0;
+
   const MonthlyAttendanceSummary({
     required this.monthYear,
     required this.totalWorkingDays,
@@ -119,9 +121,11 @@ class MonthlyAttendanceSummary {
     }
 
     final totalCounted = present + absent + lateCount + leave;
+    // No marks recorded = 0% with hasRecords false; the screen says "no
+    // attendance recorded" instead of showing an invented 100%.
     final double calcPercentage = totalCounted > 0
         ? ((present + lateCount) / totalCounted) * 100.0
-        : 100.0;
+        : 0.0;
 
     return MonthlyAttendanceSummary(
       monthYear: monthYear,

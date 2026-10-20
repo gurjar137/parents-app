@@ -4,7 +4,6 @@ import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../providers/parent_app_provider.dart';
-import '../../main_navigation_screen.dart';
 
 class ParentSignupScreen extends StatefulWidget {
   const ParentSignupScreen({super.key});
@@ -84,9 +83,8 @@ class _ParentSignupScreenState extends State<ParentSignupScreen> {
           backgroundColor: AppColors.success,
         ),
       );
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-      );
+      // Back to the root: it now shows "Link your child" for this new account.
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } else if (res.status == AuthStatus.emailConfirmationRequired) {
       showDialog(
         context: context,

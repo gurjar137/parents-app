@@ -17,7 +17,7 @@ class ResultsScreen extends StatefulWidget {
 
 class _ResultsScreenState extends State<ResultsScreen> {
   int _selectedExamIndex = 0;
-  String _selectedSession = '2026-2027';
+  String? _selectedSession; // null = all sessions
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +53,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       );
     }
 
-    if (provider.isResultsLoading) {
+    if (!provider.hasResultsData && provider.resultsError == null) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Academic Results • ${child.name}', style: AppTextStyles.headingSmall),
@@ -75,7 +75,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
       );
     }
 
-    if (provider.resultsError != null) {
+    if (provider.resultsError != null && !provider.isResultsLoading) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Academic Results • ${child.name}', style: AppTextStyles.headingSmall),
@@ -118,15 +118,22 @@ class _ResultsScreenState extends State<ResultsScreen> {
     }
 
     final allResults = provider.currentResultsList;
-    final results = allResults.where((r) => r.isPublished).toList();
+    final sessions = allResults.map((r) => r.academicSession).where((v) => v.isNotEmpty).toSet().toList()..sort();
+    if (_selectedSession != null && !sessions.contains(_selectedSession)) _selectedSession = null;
+    final results = allResults
+        .where((r) => r.isPublished && (_selectedSession == null || r.academicSession == _selectedSession))
+        .toList();
 
     if (results.isEmpty) {
       return Scaffold(
         appBar: AppBar(title: Text('Academic Results • ${child.name}', style: AppTextStyles.headingSmall)),
-        body: EmptyStateWidget(
+        body: RefreshIndicator(
+          onRefresh: provider.loadResultsForSelectedChild,
+          child: ListView(children: [SizedBox(height: 480, child: EmptyStateWidget(
           icon: Icons.grade_outlined,
           title: 'No published results yet',
-          description: 'Exam results for ${child.name} will be displayed here once officially published by the school board.',
+          description: 'Exam results for ${child.name} will appear here once the school publishes them.',
+        ))]),
         ),
       );
     }
@@ -138,8 +145,10 @@ class _ResultsScreenState extends State<ResultsScreen> {
         title: Text('Academic Results • ${child.name}', style: AppTextStyles.headingSmall),
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
+      body: RefreshIndicator(
+        onRefresh: provider.loadResultsForSelectedChild,
+        child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,7 +162,9 @@ class _ResultsScreenState extends State<ResultsScreen> {
                   children: [
                     CircleAvatar(
                       radius: 26,
-                      backgroundImage: NetworkImage(child.avatarUrl),
+                      backgroundColor: AppColors.brandIndigo,
+                      child: Text(child.name.isNotEmpty ? child.name[0].toUpperCase() : '?',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -161,7 +172,13 @@ class _ResultsScreenState extends State<ResultsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(child.name, style: AppTextStyles.headingSmall.copyWith(color: Colors.white, fontSize: 16)),
-                          Text('Class ${child.className} • Session $_selectedSession', style: AppTextStyles.bodySmall.copyWith(color: Colors.white70)),
+                          Text(
+                            [
+                              if (child.className.isNotEmpty) 'Class ${child.className}',
+                              if (currentExam.academicSession.isNotEmpty) 'Session ${currentExam.academicSession}',
+                            ].join(' • '),
+                            style: AppTextStyles.bodySmall.copyWith(color: Colors.white70),
+                          ),
                         ],
                       ),
                     ),
@@ -172,7 +189,7 @@ class _ResultsScreenState extends State<ResultsScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        'Grade ${currentExam.overallGrade}',
+                        '${currentExam.overallPercentage.toStringAsFixed(1)}%',
                         style: AppTextStyles.headingSmall.copyWith(color: Colors.white, fontSize: 15),
                       ),
                     ),
@@ -204,14 +221,15 @@ class _ResultsScreenState extends State<ResultsScreen> {
                             value: _selectedSession,
                             isExpanded: true,
                             style: AppTextStyles.bodyMedium,
-                            items: const [
-                              DropdownMenuItem(value: '2026-2027', child: Text('Session 2026-2027')),
-                              DropdownMenuItem(value: '2025-2026', child: Text('Session 2025-2026')),
+                            items: [
+                              const DropdownMenuItem<String>(value: null, child: Text('All sessions')),
+                              for (final ses in sessions) DropdownMenuItem<String>(value: ses, child: Text('Session $ses')),
                             ],
                             onChanged: (val) {
-                              if (val != null) {
-                                setState(() => _selectedSession = val);
-                              }
+                              setState(() {
+                                _selectedSession = val;
+                                _selectedExamIndex = 0;
+                              });
                             },
                           ),
                         ),
@@ -267,11 +285,11 @@ class _ResultsScreenState extends State<ResultsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildSummaryStat('Total Obtained', '${currentExam.totalObtained.toInt()} / ${currentExam.totalMax.toInt()}'),
+                        _buildSummaryStat('Total Obtained', '${_fmt(currentExam.totalObtained)} / ${_fmt(currentExam.totalMax)}'),
                         Container(height: 30, width: 1, color: AppColors.border),
                         _buildSummaryStat('Percentage', '${currentExam.overallPercentage.toStringAsFixed(1)}%'),
                         Container(height: 30, width: 1, color: AppColors.border),
-                        _buildSummaryStat('Status', currentExam.resultStatus),
+                        _buildSummaryStat('Status', currentExam.resultStatus.isEmpty ? '—' : currentExam.resultStatus),
                       ],
                     ),
                   ],
@@ -340,14 +358,18 @@ class _ResultsScreenState extends State<ResultsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '${sub.obtainedMarks.toInt()} / ${sub.maxMarks.toInt()}',
+                              sub.obtainedMarks == null
+                                  ? (sub.status.isNotEmpty ? _titleCase(sub.status) : '—')
+                                  : '${_fmt(sub.obtainedMarks!)} / ${_fmt(sub.maxMarks)}',
                               style: AppTextStyles.headingSmall.copyWith(fontSize: 14),
                             ),
-                            const SizedBox(height: 2),
-                            StatusBadge(
-                              label: 'Grade ${sub.grade}',
-                              type: sub.grade.startsWith('A') ? StatusType.success : StatusType.info,
-                            ),
+                            if (sub.passed != null) ...[
+                              const SizedBox(height: 2),
+                              StatusBadge(
+                                label: sub.passed! ? 'Passed' : 'Below pass marks',
+                                type: sub.passed! ? StatusType.success : StatusType.danger,
+                              ),
+                            ],
                           ],
                         ),
                       ],
@@ -359,8 +381,18 @@ class _ResultsScreenState extends State<ResultsScreen> {
           ],
         ),
       ),
+      ),
     );
   }
+
+  static String _fmt(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+
+  static String _titleCase(String raw) => raw
+      .toLowerCase()
+      .split(RegExp(r'[_\s]+'))
+      .where((w) => w.isNotEmpty)
+      .map((w) => w[0].toUpperCase() + w.substring(1))
+      .join(' ');
 
   Widget _buildSummaryStat(String label, String value) {
     return Column(

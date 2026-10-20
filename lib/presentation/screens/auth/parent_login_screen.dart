@@ -4,7 +4,6 @@ import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../providers/parent_app_provider.dart';
-import '../../main_navigation_screen.dart';
 import 'forgot_password_screen.dart';
 import 'parent_signup_screen.dart';
 
@@ -16,59 +15,21 @@ class ParentLoginScreen extends StatefulWidget {
 }
 
 class _ParentLoginScreenState extends State<ParentLoginScreen> {
-  final TextEditingController _codeController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final FocusNode _codeFocus = FocusNode();
   final FocusNode _emailFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
 
-  bool _isParentCodeLoginMode = true;
   bool _isPasswordVisible = false;
   String? _validationError;
 
   @override
   void dispose() {
-    _codeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _codeFocus.dispose();
     _emailFocus.dispose();
     _passwordFocus.dispose();
     super.dispose();
-  }
-
-  Future<void> _handleParentCodeLogin(ParentAppProvider provider) async {
-    final rawCode = _codeController.text.trim();
-
-    if (rawCode.isEmpty) {
-      setState(() {
-        _validationError = 'Please enter the unique Parent Code provided by your school.';
-      });
-      return;
-    }
-
-    setState(() {
-      _validationError = null;
-    });
-
-    final result = await provider.loginWithParentCode(rawCode);
-
-    if (!mounted) return;
-
-    if (result.status == AuthStatus.success) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 250),
-          pageBuilder: (context, animation, secondaryAnimation) => FadeTransition(
-            opacity: animation,
-            child: const MainNavigationScreen(),
-          ),
-        ),
-      );
-    } else {
-      _showErrorDialog(context, result);
-    }
   }
 
   Future<void> _handleEmailLogin(ParentAppProvider provider) async {
@@ -100,17 +61,9 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
 
     if (!mounted) return;
 
-    if (result.status == AuthStatus.success) {
-      Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 250),
-          pageBuilder: (context, animation, secondaryAnimation) => FadeTransition(
-            opacity: animation,
-            child: const MainNavigationScreen(),
-          ),
-        ),
-      );
-    } else {
+    // On success the root widget (main.dart) switches to Link Child or the
+    // dashboard from the verified session, so nothing is pushed here.
+    if (result.status != AuthStatus.success) {
       _showErrorDialog(context, result);
     }
   }
@@ -122,8 +75,8 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
 
     switch (result.status) {
       case AuthStatus.invalidCredentials:
-        title = 'Invalid Parent Code';
-        message = result.errorMessage ?? 'Invalid Parent Code. Please check the code provided by your school.';
+        title = 'Sign-in failed';
+        message = result.errorMessage ?? 'Invalid email or password.';
         buttonText = 'Try Again';
         break;
       case AuthStatus.emailConfirmationRequired:
@@ -132,18 +85,18 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
         buttonText = 'OK';
         break;
       case AuthStatus.inactiveAccount:
-        title = 'Parent Code Inactive';
-        message = result.errorMessage ?? 'This Parent Code is inactive. Please contact your school administrator.';
+        title = 'Account inactive';
+        message = result.errorMessage ?? 'This parent account is inactive. Please contact your school administrator.';
         buttonText = 'Contact Admin';
         break;
       case AuthStatus.alreadyRegistered:
         title = 'Account Exists';
-        message = result.errorMessage ?? 'An account with this code or email already exists.';
+        message = result.errorMessage ?? 'An account with this email already exists.';
         buttonText = 'OK';
         break;
       case AuthStatus.networkError:
         title = 'Network Connection Error';
-        message = 'Unable to verify Parent Code. Please check your internet connection.';
+        message = 'Unable to sign in. Please check your internet connection.';
         buttonText = 'Retry';
         break;
       default:
@@ -207,11 +160,10 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
                 ),
                 child: CircleAvatar(
                   backgroundColor: AppColors.brandIndigo,
-                  backgroundImage: NetworkImage(branding.logoUrl),
-                  child: Text(
-                    branding.schoolName[0],
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
-                  ),
+                  backgroundImage: branding.logoUrl.isNotEmpty ? NetworkImage(branding.logoUrl) : null,
+                  child: branding.logoUrl.isNotEmpty
+                      ? null
+                      : const Icon(Icons.school_rounded, color: Colors.white, size: 26),
                 ),
               ),
 
@@ -223,11 +175,6 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
                 textAlign: TextAlign.center,
               ),
 
-              Text(
-                branding.affiliation,
-                style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-                textAlign: TextAlign.center,
-              ),
 
               const SizedBox(height: 36),
 
@@ -240,9 +187,8 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
                     Text('Parent Login', style: AppTextStyles.headingLarge.copyWith(fontSize: 26)),
                     const SizedBox(height: 6),
                     Text(
-                      _isParentCodeLoginMode
-                          ? 'Enter your unique Parent Code provided by your school.'
-                          : 'Sign in with your email and password.',
+                      'Sign in with your email and password. New here? Create an account, '
+                      'then link your child with the Parent Access Code from your school.',
                       style: AppTextStyles.bodyMedium,
                     ),
                   ],
@@ -276,128 +222,9 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
               ],
 
               // ---------------------------------------------------------------
-              // PRIMARY LOGIN MODE 1: PARENT CODE INPUT FIELD
-              // ---------------------------------------------------------------
-              if (_isParentCodeLoginMode) ...[
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Enter Parent Code', style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _codeController,
-                  focusNode: _codeFocus,
-                  enabled: !isLoading,
-                  textCapitalization: TextCapitalization.characters,
-                  onChanged: (val) {
-                    if (_validationError != null) setState(() => _validationError = null);
-                  },
-                  onSubmitted: (_) => _handleParentCodeLogin(provider),
-                  style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                  decoration: InputDecoration(
-                    hintText: 'e.g. PRT-7K4M92',
-                    hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted, letterSpacing: 0),
-                    prefixIcon: const Icon(Icons.vpn_key_rounded, color: AppColors.brandIndigo),
-                    filled: true,
-                    fillColor: isDark ? AppColors.darkSubSurface : AppColors.subSurface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.border),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.border),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: AppColors.brandIndigo, width: 2),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 28),
-
-                // Login Button for Parent Code
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : () => _handleParentCodeLogin(provider),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandIndigo,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: isLoading
-                        ? Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                              ),
-                              const SizedBox(width: 12),
-                              Text('Verifying Parent Code...', style: AppTextStyles.button),
-                            ],
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text('Login', style: AppTextStyles.button.copyWith(fontSize: 16)),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward_rounded, size: 18),
-                            ],
-                          ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                Text(
-                  'Enter the unique Parent Code provided by your school.',
-                  style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-                  textAlign: TextAlign.center,
-                ),
-
-                const SizedBox(height: 8),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('Don\'t have a Parent Code? ', style: AppTextStyles.caption),
-                    GestureDetector(
-                      onTap: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            title: Text('Parent Code Help', style: AppTextStyles.headingSmall),
-                            content: Text(
-                              'Please contact your school administrator or office desk to collect your unique Parent Code (e.g. PRT-7K4M92).',
-                              style: AppTextStyles.bodyMedium,
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Close'),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      child: Text(
-                        'Contact Administrator',
-                        style: AppTextStyles.caption.copyWith(color: AppColors.brandBlue, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-
-              // ---------------------------------------------------------------
               // SECONDARY LOGIN MODE 2: EMAIL & PASSWORD (TOGGLE)
               // ---------------------------------------------------------------
-              if (!_isParentCodeLoginMode) ...[
+              ...[
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text('Parent Email', style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
@@ -530,24 +357,6 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
 
               const SizedBox(height: 24),
 
-              // Toggle between Parent Code login & Email login
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _isParentCodeLoginMode = !_isParentCodeLoginMode;
-                    _validationError = null;
-                  });
-                },
-                child: Text(
-                  _isParentCodeLoginMode
-                      ? 'Or Sign In with Email & Password'
-                      : 'Or Sign In with Parent Code',
-                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.brandIndigo, fontWeight: FontWeight.bold),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
               // Sign Up Link
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -580,7 +389,7 @@ class _ParentLoginScreenState extends State<ParentLoginScreen> {
                   const Icon(Icons.shield_outlined, size: 14, color: AppColors.success),
                   const SizedBox(width: 6),
                   Text(
-                    'Secured by Admin Parent Code & Supabase Auth',
+                    'Secured by Supabase Auth',
                     style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                   ),
                 ],

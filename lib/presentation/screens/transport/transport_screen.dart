@@ -30,10 +30,10 @@ class TransportScreen extends StatelessWidget {
               children: [
                 const Icon(Icons.directions_bus_outlined, size: 64, color: AppColors.textMuted),
                 const SizedBox(height: 16),
-                Text('No Transport Assigned', style: AppTextStyles.headingSmall),
+                Text('Transport not available', style: AppTextStyles.headingSmall),
                 const SizedBox(height: 8),
                 Text(
-                  'No bus tracking details available for the selected student.',
+                  'Bus route and tracking details is not available in the Parents App yet. Please contact the school office.',
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
                   textAlign: TextAlign.center,
                 ),

@@ -5,8 +5,8 @@ class AppNotificationModel {
   final String title;
   final String message;
   final DateTime timestamp;
-  final String category; // "Homework", "Attendance", "Notices", "Results", "Fees", "School"
-  final String targetType; // "homework", "attendance", "notice", "result", "fee"
+  final String category; // "Fees", "Attendance", "Homework", "Results", "Notices", ...
+  final String targetType; // "fee", "attendance", "homework", "result", "notice", "general"
   final String? targetId;
   final bool isRead;
 
@@ -18,7 +18,7 @@ class AppNotificationModel {
     required this.message,
     required this.timestamp,
     required this.category,
-    this.targetType = 'notice',
+    this.targetType = 'general',
     this.targetId,
     this.isRead = false,
   });
@@ -38,58 +38,31 @@ class AppNotificationModel {
     );
   }
 
-  factory AppNotificationModel.fromMap(Map<String, dynamic> map) {
-    DateTime parseDate(dynamic val) {
-      if (val is String) {
-        return DateTime.tryParse(val) ?? DateTime.now();
-      } else if (val is DateTime) {
-        return val;
-      }
-      return DateTime.now();
-    }
-
-    final category = map['category'] ?? map['type'] ?? 'School';
-    String targetType = (map['target_type'] ?? category).toString().toLowerCase();
-    if (targetType.contains('home')) {
-      targetType = 'homework';
-    } else if (targetType.contains('attend')) {
-      targetType = 'attendance';
-    } else if (targetType.contains('notice')) {
-      targetType = 'notice';
-    } else if (targetType.contains('result')) {
-      targetType = 'result';
-    } else if (targetType.contains('fee')) {
-      targetType = 'fee';
-    } else {
-      targetType = 'notice';
-    }
-
-    return AppNotificationModel(
-      id: map['id'] ?? map['notification_id'] ?? 'NOTIF-${DateTime.now().millisecondsSinceEpoch}',
-      schoolId: map['school_id'] ?? '',
-      studentId: map['student_id'],
-      title: map['title'] ?? 'School Alert',
-      message: map['message'] ?? map['body'] ?? '',
-      timestamp: parseDate(map['created_at'] ?? map['timestamp']),
-      category: category,
-      targetType: targetType,
-      targetId: map['target_id'] ?? map['payload_id'],
-      isRead: map['is_read'] ?? false,
-    );
+  static String targetTypeFor(String relatedType, String category) {
+    final t = '${relatedType.toLowerCase()} ${category.toLowerCase()}';
+    if (t.contains('fee') || t.contains('payment')) return 'fee';
+    if (t.contains('attend')) return 'attendance';
+    if (t.contains('homework')) return 'homework';
+    if (t.contains('result') || t.contains('exam')) return 'result';
+    if (t.contains('notice')) return 'notice';
+    return 'general';
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'school_id': schoolId,
-      'student_id': studentId,
-      'title': title,
-      'message': message,
-      'created_at': timestamp.toIso8601String(),
-      'category': category,
-      'target_type': targetType,
-      'target_id': targetId,
-      'is_read': isRead,
-    };
+  /// Parses a row of `parent_get_notifications`.
+  factory AppNotificationModel.fromMap(Map<String, dynamic> map) {
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString().trim();
+    final category = s(map['category']).isNotEmpty ? s(map['category']) : 'School';
+    return AppNotificationModel(
+      id: s(map['id']),
+      schoolId: s(map['school_id']),
+      studentId: s(map['student_id']).isEmpty ? null : s(map['student_id']),
+      title: s(map['title']),
+      message: s(map['message']),
+      timestamp: (DateTime.tryParse(s(map['created_at'])) ?? DateTime.fromMillisecondsSinceEpoch(0)).toLocal(),
+      category: category,
+      targetType: targetTypeFor(s(map['related_record_type']), category),
+      targetId: s(map['related_record_id']).isEmpty ? null : s(map['related_record_id']),
+      isRead: map['is_read'] == true,
+    );
   }
 }

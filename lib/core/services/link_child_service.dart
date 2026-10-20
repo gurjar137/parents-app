@@ -1,13 +1,16 @@
-import 'package:flutter/foundation.dart';
 import '../../data/models/student_model.dart';
-import 'supabase_service.dart';
+import 'parent_api.dart';
 
 enum LinkStatus {
   success,
-  notFound,
   alreadyLinked,
-  unauthenticated,
   invalidCode,
+  alreadyClaimed,
+  otherSchool,
+  notAParentAccount,
+  accountInactive,
+  rateLimited,
+  unauthenticated,
   networkError,
   backendError,
 }
@@ -15,109 +18,102 @@ enum LinkStatus {
 class LinkChildResponse {
   final LinkStatus status;
   final StudentModel? student;
+  final String? studentId;
   final String? errorMessage;
   final String? userMessage;
 
   const LinkChildResponse({
     required this.status,
     this.student,
+    this.studentId,
     this.errorMessage,
     this.userMessage,
   });
 }
 
 class LinkChildService {
-  /// Verifies student Parent Access Code against public.students.parent_access_code
-  static Future<LinkChildResponse> linkStudentToParent({
-    required String codeOrStudentId,
-    String relationship = 'Parent',
-  }) async {
-    final cleanCode = codeOrStudentId.trim().toUpperCase();
-
-    if (cleanCode.isEmpty) {
+  /// Redeems the Parent Access Code the school issued for a child
+  /// (`parent_claim_child`). The server verifies the code, the school and the
+  /// signed-in account, creates or adopts the parent record and the link, and
+  /// rate-limits attempts. Nothing is linked on the device.
+  static Future<LinkChildResponse> claimChild({required String accessCode, String? relationship}) async {
+    final code = accessCode.trim().toUpperCase();
+    if (code.isEmpty) {
       return const LinkChildResponse(
         status: LinkStatus.invalidCode,
-        errorMessage: 'Please enter a valid Parent Access Code.',
+        errorMessage: 'Please enter the Parent Access Code from your school.',
       );
     }
 
-    // 1. Try Supabase verification against public.students.parent_access_code via RPC or direct query
-    if (SupabaseService.isInitialized) {
-      try {
-        List<dynamic>? rpcRes;
-        try {
-          rpcRes = await SupabaseService.client
-              .rpc('lookup_student_by_parent_access_code', params: {'p_code': cleanCode});
-        } catch (_) {}
-
-        Map<String, dynamic>? studentRes;
-        if (rpcRes != null && rpcRes.isNotEmpty) {
-          studentRes = Map<String, dynamic>.from(rpcRes.first);
-        } else {
-          studentRes = await SupabaseService.client
-              .from('students')
-              .select()
-              .eq('parent_access_code', cleanCode)
-              .maybeSingle();
-        }
-
-        if (studentRes != null) {
-          final student = StudentModel.fromMap(studentRes, studentRes['id'] ?? cleanCode);
-
-          final currentUser = SupabaseService.client.auth.currentUser;
-          if (currentUser != null && student.id.isNotEmpty) {
-            try {
-              await SupabaseService.client.from('parent_students').upsert({
-                'parent_id': currentUser.id,
-                'student_id': student.id,
-                'relationship': relationship,
-              }, onConflict: 'parent_id,student_id');
-            } catch (e) {
-              if (kDebugMode) debugPrint('[LinkChildService] parent_students upsert notice: $e');
-            }
-          }
-
-          return LinkChildResponse(
-            status: LinkStatus.success,
-            student: student,
-            userMessage: 'Successfully linked ${student.name} (${student.className})!',
-          );
-        }
-      } catch (e) {
-        if (kDebugMode) debugPrint('[LinkChildService] Supabase link notice: $e');
-      }
+    Map<String, dynamic> res;
+    try {
+      res = await ParentApi.instance.rpcObject('parent_claim_child', {
+        'p_access_code': code,
+        'p_relationship': relationship,
+      });
+    } on ParentDataException catch (e) {
+      return LinkChildResponse(
+        status: switch (e.kind) {
+          ParentDataErrorKind.notAuthorized => LinkStatus.unauthenticated,
+          ParentDataErrorKind.network => LinkStatus.networkError,
+          _ => LinkStatus.backendError,
+        },
+        errorMessage: e.kind == ParentDataErrorKind.notAuthorized
+            ? 'Your session has expired. Please sign in again.'
+            : e.message,
+      );
     }
 
-    // Fallback: If not found in database, return notFound
-    return const LinkChildResponse(
-      status: LinkStatus.notFound,
-      errorMessage: 'Invalid Parent Access Code. Please verify the code with your school administration.',
-    );
+    return responseFromClaimResult(res);
   }
 
-  /// Fetches authorized linked students for the given parent auth ID
-  static Future<List<StudentModel>> fetchLinkedStudentsForParent(String parentAuthUserId) async {
-    if (SupabaseService.isInitialized) {
-      try {
-        final rels = await SupabaseService.client
-            .from('parent_students')
-            .select('student_id, students(*)')
-            .eq('parent_id', parentAuthUserId);
-
-        if (rels.isNotEmpty) {
-          final List<StudentModel> list = [];
-          for (final item in rels) {
-            if (item['students'] != null) {
-              list.add(StudentModel.fromMap(item['students'], item['student_id']));
-            }
-          }
-          if (list.isNotEmpty) return list;
-        }
-      } catch (e) {
-        if (kDebugMode) debugPrint('[LinkChildService] Fetch linked students notice: $e');
-      }
+  /// Maps the `parent_claim_child` result to a status and parent-facing text.
+  static LinkChildResponse responseFromClaimResult(Map<String, dynamic> res) {
+    final success = res['success'] == true;
+    final reason = (res['reason'] ?? '').toString();
+    if (success) {
+      return LinkChildResponse(
+        status: reason == 'ALREADY_LINKED' ? LinkStatus.alreadyLinked : LinkStatus.success,
+        studentId: res['student_id']?.toString(),
+        userMessage: reason == 'ALREADY_LINKED' ? 'This child is already linked to your account.' : 'Child linked successfully.',
+      );
     }
-
-    return [];
+    switch (reason) {
+      case 'INVALID_CODE':
+        return const LinkChildResponse(
+          status: LinkStatus.invalidCode,
+          errorMessage: 'This Parent Access Code is not valid. Please check it with the school office.',
+        );
+      case 'ALREADY_CLAIMED':
+        return const LinkChildResponse(
+          status: LinkStatus.alreadyClaimed,
+          errorMessage: 'This code has already been used by another account. Ask the school to issue a new code.',
+        );
+      case 'OTHER_SCHOOL':
+        return const LinkChildResponse(
+          status: LinkStatus.otherSchool,
+          errorMessage: 'This account is registered with a different school. Use a separate account for each school.',
+        );
+      case 'NOT_A_PARENT_ACCOUNT':
+        return const LinkChildResponse(
+          status: LinkStatus.notAParentAccount,
+          errorMessage: 'This is a school staff account. Please sign in with a parent account to link a child.',
+        );
+      case 'ACCOUNT_INACTIVE':
+        return const LinkChildResponse(
+          status: LinkStatus.accountInactive,
+          errorMessage: 'Your parent account is inactive. Please contact the school office.',
+        );
+      case 'RATE_LIMITED':
+        return const LinkChildResponse(
+          status: LinkStatus.rateLimited,
+          errorMessage: 'Too many attempts. Please wait 15 minutes and try again.',
+        );
+      default:
+        return const LinkChildResponse(
+          status: LinkStatus.backendError,
+          errorMessage: 'The code could not be verified. Please try again.',
+        );
+    }
   }
 }

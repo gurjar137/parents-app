@@ -45,7 +45,7 @@ class _SchoolCalendarScreenState extends State<SchoolCalendarScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Academic Calendar 2026', style: AppTextStyles.headingSmall),
+        title: Text('School Calendar', style: AppTextStyles.headingSmall),
         elevation: 0,
       ),
       body: Column(
@@ -85,8 +85,8 @@ class _SchoolCalendarScreenState extends State<SchoolCalendarScreen> {
             child: filteredEvents.isEmpty
                 ? const EmptyStateWidget(
                     icon: Icons.event_busy_rounded,
-                    title: 'No events found',
-                    description: 'There are no calendar events in this category.',
+                    title: 'Calendar not available',
+                    description: 'The school calendar is not available in the Parents App yet. Please contact the school office. Exam dates are under Exams.',
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.all(16),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -106,12 +107,11 @@ class HomeworkDetailScreen extends StatelessWidget {
               Text('Attachment File', style: AppTextStyles.headingSmall),
               const SizedBox(height: 10),
               InkWell(
-                onTap: () {
+                onTap: () async {
+                  await Clipboard.setData(ClipboardData(text: currentHw.attachmentUrl ?? ''));
+                  if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Opening attachment: ${currentHw.attachmentName}...'),
-                      backgroundColor: AppColors.brandIndigo,
-                    ),
+                    const SnackBar(content: Text('Attachment link copied. Paste it into your browser to open it.')),
                   );
                 },
                 borderRadius: BorderRadius.circular(16),
@@ -153,39 +153,11 @@ class HomeworkDetailScreen extends StatelessWidget {
               const SizedBox(height: 32),
             ],
 
-            // Action Toggle Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: currentHw.isCompleted ? AppColors.subSurface : AppColors.brandIndigo,
-                  foregroundColor: currentHw.isCompleted ? AppColors.textPrimary : Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                icon: Icon(
-                  currentHw.isCompleted ? Icons.undo_rounded : Icons.check_circle_rounded,
-                ),
-                label: Text(
-                  currentHw.isCompleted ? 'Mark as Pending' : 'Mark as Completed',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                onPressed: () {
-                  provider.toggleHomeworkCompletion(currentHw.id);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        currentHw.isCompleted
-                            ? 'Homework marked as pending'
-                            : 'Homework marked as completed! Great job.',
-                      ),
-                      backgroundColor: currentHw.isCompleted ? AppColors.warning : AppColors.success,
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
-                },
-              ),
+            // Homework is read-only for parents: the school does not record
+            // submissions or completion, so no "Mark as completed" is offered.
+            Text(
+              'Submissions are handled in class. Contact the teacher about this homework.',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
             ),
           ],
         ),

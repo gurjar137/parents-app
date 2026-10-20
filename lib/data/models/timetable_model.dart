@@ -4,11 +4,11 @@ class TimetableEntryModel {
   final String className;
   final String section;
   final String dayOfWeek; // "Monday", "Tuesday", etc.
-  final String startTime; // "08:00 AM"
-  final String endTime; // "08:45 AM"
+  final String startTime;
+  final String endTime;
   final String subject;
-  final String room;
-  final String teacherName;
+  final String room; // '' = not recorded
+  final String teacherName; // '' = not recorded
   final int periodNumber;
   final bool isBreak;
 
@@ -23,44 +23,44 @@ class TimetableEntryModel {
     required this.subject,
     required this.room,
     required this.teacherName,
-    this.periodNumber = 1,
+    this.periodNumber = 0,
     this.isBreak = false,
   });
 
-  factory TimetableEntryModel.fromMap(Map<String, dynamic> map) {
-    final rawDay = (map['day_of_week'] ?? map['day'] ?? 'Monday').toString();
-    final cleanDay = rawDay.substring(0, 1).toUpperCase() + rawDay.substring(1).toLowerCase();
+  static const List<String> weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-    return TimetableEntryModel(
-      id: map['id'] ?? 'TT-${DateTime.now().millisecondsSinceEpoch}',
-      schoolId: map['school_id'] ?? '',
-      className: map['class_name'] ?? map['class'] ?? '8-A',
-      section: map['section'] ?? 'A',
-      dayOfWeek: cleanDay,
-      startTime: map['start_time'] ?? '08:00 AM',
-      endTime: map['end_time'] ?? '08:45 AM',
-      subject: map['subject'] ?? map['subject_name'] ?? 'Class',
-      room: map['room'] ?? map['room_no'] ?? 'Room 101',
-      teacherName: map['teacher_name'] ?? map['teacher'] ?? 'Class Teacher',
-      periodNumber: map['period_number'] ?? map['period'] ?? 1,
-      isBreak: map['is_break'] ?? map['subject'].toString().toLowerCase().contains('break'),
-    );
+  static int weekdayIndex(String day) {
+    final i = weekdays.indexWhere((d) => d.toLowerCase() == day.toLowerCase());
+    return i < 0 ? 99 : i;
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'school_id': schoolId,
-      'class_name': className,
-      'section': section,
-      'day_of_week': dayOfWeek,
-      'start_time': startTime,
-      'end_time': endTime,
-      'subject': subject,
-      'room': room,
-      'teacher_name': teacherName,
-      'period_number': periodNumber,
-      'is_break': isBreak,
-    };
+  /// "MONDAY" / "mon" / "1" (ISO, 1 = Monday) -> "Monday".
+  static String normalizeDay(String raw) {
+    final v = raw.trim().toLowerCase();
+    final n = int.tryParse(v);
+    if (n != null && n >= 1 && n <= 7) return weekdays[n - 1];
+    for (final d in weekdays) {
+      if (v.startsWith(d.substring(0, 3).toLowerCase())) return d;
+    }
+    return raw.isEmpty ? '' : raw[0].toUpperCase() + raw.substring(1).toLowerCase();
+  }
+
+  /// Parses a row of `parent_get_timetable`.
+  factory TimetableEntryModel.fromMap(Map<String, dynamic> map) {
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString().trim();
+    final subject = s(map['subject_name']).isNotEmpty ? s(map['subject_name']) : s(map['subject']);
+    return TimetableEntryModel(
+      id: s(map['id']),
+      className: s(map['class_name']),
+      section: s(map['section_name']),
+      dayOfWeek: normalizeDay(s(map['day_of_week'])),
+      startTime: s(map['start_time']),
+      endTime: s(map['end_time']),
+      subject: subject.isNotEmpty ? subject : 'Period',
+      room: s(map['room']),
+      teacherName: s(map['teacher_name']),
+      periodNumber: int.tryParse(s(map['period_number']).split('.').first) ?? 0,
+      isBreak: subject.toLowerCase().contains('break') || subject.toLowerCase().contains('lunch'),
+    );
   }
 }

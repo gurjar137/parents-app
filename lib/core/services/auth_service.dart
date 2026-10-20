@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/parent_model.dart';
 import '../../data/models/student_model.dart';
-import '../config/supabase_config.dart';
+import 'parent_api.dart';
 import 'supabase_service.dart';
 
 enum AuthStatus {
@@ -14,290 +14,143 @@ enum AuthStatus {
   weakPassword,
   passwordMismatch,
   inactiveAccount,
+  notAParentAccount,
   networkError,
   backendError,
 }
 
 class AuthResponse {
   final AuthStatus status;
-  final ParentModel? parent;
-  final List<StudentModel>? children;
   final String? errorMessage;
   final String? userMessage;
 
   const AuthResponse({
     required this.status,
-    this.parent,
-    this.children,
     this.errorMessage,
     this.userMessage,
   });
 }
 
+/// The signed-in parent and the children the SERVER says are linked
+/// (`parent_get_session`). Nothing here comes from device storage or from
+/// editable Auth metadata.
+class ParentSession {
+  final ParentModel parent;
+  final List<StudentModel> children;
+
+  /// 'OK', 'NO_PROFILE' (signed up, no child linked yet), 'INACTIVE_PROFILE',
+  /// 'AMBIGUOUS_SCHOOL', 'NO_SCHOOL' or 'NOT_A_PARENT_ACCOUNT'.
+  final String membership;
+
+  const ParentSession({required this.parent, required this.children, required this.membership});
+
+  bool get isStaffAccount => membership == 'NOT_A_PARENT_ACCOUNT';
+  bool get isInactive => membership == 'INACTIVE_PROFILE';
+
+  factory ParentSession.fromJson(Map<String, dynamic> json) {
+    final profile = json['profile'] is Map ? Map<String, dynamic>.from(json['profile'] as Map) : const <String, dynamic>{};
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString();
+    final children = (json['children'] is List ? json['children'] as List : const [])
+        .whereType<Map>()
+        .map((m) => StudentModel.fromSession(Map<String, dynamic>.from(m)))
+        .toList();
+    return ParentSession(
+      parent: ParentModel(
+        id: s(json['auth_user_id']),
+        name: s(profile['full_name']),
+        email: s(profile['email']).isNotEmpty ? s(profile['email']) : s(json['email']),
+        phone: s(profile['phone']),
+        avatarUrl: '',
+        status: s(profile['status']).isNotEmpty ? s(profile['status']) : 'active',
+        schoolId: s(json['school_id']).isEmpty ? null : s(json['school_id']),
+        childrenIds: children.map((c) => c.id).toList(),
+      ),
+      children: children,
+      membership: s(json['membership']).isEmpty ? 'OK' : s(json['membership']),
+    );
+  }
+}
+
 class AuthService {
-  static const String _sessionKey = 'auth_parent_session_user_id';
-  static const String _codeKey = 'auth_parent_access_code';
+  // Keys written by earlier versions (parent code / user id). They are
+  // removed on sign-out and never read: the session comes from Supabase Auth.
+  static const List<String> _legacyKeys = ['auth_parent_session_user_id', 'auth_parent_access_code'];
 
-  /// Saves session metadata locally
-  static Future<void> saveSession(String userId, {String? parentCode}) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sessionKey, userId);
-    if (parentCode != null && parentCode.isNotEmpty) {
-      await prefs.setString(_codeKey, parentCode);
-    }
+  static User? get currentUser => SupabaseService.isInitialized ? SupabaseService.client.auth.currentUser : null;
+
+  static Session? get currentSession =>
+      SupabaseService.isInitialized ? SupabaseService.client.auth.currentSession : null;
+
+  /// Server view of the signed-in parent and linked children.
+  static Future<ParentSession> loadSession() async {
+    final json = await ParentApi.instance.rpcObject('parent_get_session');
+    return ParentSession.fromJson(json);
   }
 
-  /// Retrieves saved Parent Access Code
-  static Future<String?> getSavedParentCode() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_codeKey);
-  }
-
-  /// Retrieves current Supabase Auth User
-  static User? get currentUser {
-    if (SupabaseService.isInitialized) {
-      return SupabaseService.client.auth.currentUser;
-    }
-    return null;
-  }
-
-  /// Retrieves current Supabase Auth Session
-  static Session? get currentSession {
-    if (SupabaseService.isInitialized) {
-      return SupabaseService.client.auth.currentSession;
-    }
-    return null;
-  }
-
-  /// Clears session on logout
   static Future<void> clearSession() async {
     try {
       if (SupabaseService.isInitialized) {
         await SupabaseService.client.auth.signOut();
       }
-    } catch (_) {}
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_sessionKey);
-    await prefs.remove(_codeKey);
-    await prefs.clear();
-  }
-
-  /// Connect Admin-Generated Unique Parent Access Code (public.students.parent_access_code) to Parent App Login
-  static Future<AuthResponse> signInWithParentCode(String parentCode) async {
-    final normalizedCode = parentCode.trim().toUpperCase();
-
-    if (normalizedCode.isEmpty) {
-      return const AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: 'Please enter your unique Parent Code.',
-      );
-    }
-
-    if (kDebugMode) {
-      debugPrint('===== PARENT CODE RPC LOGIN =====');
-      debugPrint('SUPABASE URL = ${SupabaseConfig.url}');
-      debugPrint('NORMALIZED CODE = $normalizedCode');
-    }
-
-    if (!SupabaseService.isInitialized) {
-      if (normalizedCode == 'PRT-INACTIVE') {
-        return const AuthResponse(
-          status: AuthStatus.inactiveAccount,
-          errorMessage: 'This Parent Code is inactive. Please contact your school administrator.',
-        );
-      }
-      return const AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: 'Invalid Parent Code. Please check the code provided by your school.',
-      );
-    }
-
-    try {
-      final result = await SupabaseService.client.rpc(
-        'lookup_student_by_parent_access_code',
-        params: {
-          'p_code': normalizedCode,
-        },
-      );
-
-      List<dynamic> studentList = [];
-      if (result is List) {
-        studentList = result;
-      } else if (result is Map) {
-        studentList = [result];
-      }
-
-      if (studentList.isNotEmpty) {
-        final studentRes = Map<String, dynamic>.from(studentList.first);
-
-        final first = (studentRes['first_name'] ?? '').toString().trim();
-        final middle = (studentRes['middle_name'] ?? '').toString().trim();
-        final last = (studentRes['last_name'] ?? '').toString().trim();
-
-        final fullStudentName = [first, middle, last]
-            .where((part) => part.isNotEmpty)
-            .join(' ');
-
-        final computedName = fullStudentName.isNotEmpty
-            ? fullStudentName
-            : (studentRes['name'] ?? studentRes['full_name'] ?? 'Student').toString();
-
-        final className = (studentRes['class_name'] ?? '12').toString();
-        final sectionName = (studentRes['section_name'] ?? studentRes['section'] ?? 'a').toString();
-
-        final rawFather = (studentRes['father_name'] ??
-                studentRes['father_full_name'] ??
-                studentRes['fatherName'])
-            ?.toString()
-            .trim();
-        final cleanFather = (rawFather != null &&
-                rawFather.isNotEmpty &&
-                rawFather.toLowerCase() != 'null')
-            ? rawFather
-            : null;
-        final resolvedSchoolId = (studentRes['school_id'] ?? '').toString();
-
-        final student = StudentModel(
-          id: (studentRes['id'] ?? normalizedCode).toString(),
-          name: computedName,
-          fatherName: cleanFather,
-          className: '$className-$sectionName',
-          grade: className.startsWith('Class') ? className : 'Class $className',
-          section: sectionName,
-          rollNo: int.tryParse((studentRes['roll_number'] ?? studentRes['roll_no'] ?? '1').toString()) ?? 1,
-          admissionNo: (studentRes['admission_number'] ?? studentRes['admission_no'] ?? studentRes['id'] ?? normalizedCode).toString(),
-          avatarUrl: studentRes['student_photo'] ?? studentRes['avatar_url'] ?? 'https://images.unsplash.com/photo-1544717305-2782549b5136?fit=crop&w=300&h=300',
-          academicYear: (studentRes['academic_year'] ?? '2026-2027').toString(),
-          houseName: (studentRes['house_name'] ?? 'Tagore House (Blue)').toString(),
-          classTeacher: (studentRes['class_teacher'] ?? 'Class Teacher').toString(),
-          classmateCount: int.tryParse((studentRes['classmate_count'] ?? '35').toString()) ?? 35,
-          schoolId: resolvedSchoolId,
-          linkingCode: (studentRes['parent_access_code'] ?? normalizedCode).toString(),
-        );
-
-        final fatherDisplayName = cleanFather ?? 'Parent / Guardian';
-        final parentId = 'P-${student.id}';
-        final parent = ParentModel(
-          id: parentId,
-          name: fatherDisplayName,
-          email: studentRes['email'] ?? studentRes['parent_email'] ?? '',
-          phone: studentRes['phone'] ?? studentRes['father_phone'] ?? '',
-          avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=300&h=300',
-          relationship: cleanFather != null ? 'Father' : 'Parent / Guardian',
-          status: 'active',
-          schoolId: student.schoolId,
-          childrenIds: [student.id],
-        );
-
-        await saveSession(parent.id, parentCode: normalizedCode);
-
-        return AuthResponse(
-          status: AuthStatus.success,
-          parent: parent,
-          children: [student],
-          userMessage: 'Parent authenticated successfully!',
-        );
-      } else {
-        return const AuthResponse(
-          status: AuthStatus.invalidCredentials,
-          errorMessage: 'Invalid Parent Code. Please check the code provided by your school.',
-        );
-      }
-    } on PostgrestException catch (e) {
-      if (kDebugMode) debugPrint('[AuthService] RPC PostgrestException: ${e.message}');
-      return const AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: 'Invalid Parent Code. Please check the code provided by your school.',
-      );
     } catch (e) {
-      if (kDebugMode) debugPrint('[AuthService] RPC Exception: $e');
-      return const AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: 'Invalid Parent Code. Please check the code provided by your school.',
-      );
+      if (kDebugMode) debugPrint('[AuthService] signOut: $e');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    for (final k in _legacyKeys) {
+      await prefs.remove(k);
     }
   }
 
-  /// REAL Supabase Auth: Sign In with Email and Password
   static Future<AuthResponse> signInWithEmailPassword({
     required String email,
     required String password,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
-
     if (normalizedEmail.isEmpty || password.isEmpty) {
       return const AuthResponse(
         status: AuthStatus.invalidCredentials,
         errorMessage: 'Please enter both email address and password.',
       );
     }
-
     if (!SupabaseService.isInitialized) {
       return const AuthResponse(
-        status: AuthStatus.backendError,
-        errorMessage: 'Supabase service is not initialized.',
+        status: AuthStatus.networkError,
+        errorMessage: 'The app could not connect to the school server. Please check your connection and restart the app.',
       );
     }
 
     try {
-      final res = await SupabaseService.client.auth.signInWithPassword(
-        email: normalizedEmail,
-        password: password,
-      );
-
-      final user = res.user;
-      if (user == null) {
-        return const AuthResponse(
-          status: AuthStatus.invalidCredentials,
-          errorMessage: 'Invalid email or password.',
-        );
+      final res = await SupabaseService.client.auth.signInWithPassword(email: normalizedEmail, password: password);
+      if (res.user == null) {
+        return const AuthResponse(status: AuthStatus.invalidCredentials, errorMessage: 'Invalid email or password.');
       }
-
-      // Fetch or sync parent profile
-      final parentProfile = await fetchOrCreateParentProfile(user);
-
-      if (parentProfile.status.toLowerCase() != 'active') {
-        await SupabaseService.client.auth.signOut();
-        return const AuthResponse(
-          status: AuthStatus.inactiveAccount,
-          errorMessage: 'Your account is currently inactive. Please contact your school administrator.',
-        );
-      }
-
-      await saveSession(user.id);
-
-      return AuthResponse(
-        status: AuthStatus.success,
-        parent: parentProfile,
-        children: const [],
-      );
+      return const AuthResponse(status: AuthStatus.success);
     } on AuthException catch (e) {
-      if (kDebugMode) debugPrint('[AuthService] AuthException: ${e.message}');
       final msg = e.message.toLowerCase();
       if (msg.contains('invalid login credentials') || msg.contains('invalid_credentials')) {
-        return const AuthResponse(
-          status: AuthStatus.invalidCredentials,
-          errorMessage: 'Invalid email or password.',
-        );
-      } else if (msg.contains('email not confirmed')) {
+        return const AuthResponse(status: AuthStatus.invalidCredentials, errorMessage: 'Invalid email or password.');
+      }
+      if (msg.contains('email not confirmed')) {
         return const AuthResponse(
           status: AuthStatus.emailConfirmationRequired,
-          errorMessage: 'Please verify your email before signing in.',
+          errorMessage: 'Please verify your email address using the link we sent, then sign in.',
         );
       }
-      return AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: e.message,
+      return const AuthResponse(
+        status: AuthStatus.backendError,
+        errorMessage: 'Sign-in failed. Please try again.',
       );
     } catch (e) {
-      return AuthResponse(
+      return const AuthResponse(
         status: AuthStatus.networkError,
         errorMessage: 'Unable to connect. Please check your internet connection.',
       );
     }
   }
 
-  /// REAL Supabase Auth: Sign Up New Parent Account
+  /// Creates a Supabase Auth login only. The account gets no school, role or
+  /// child until the parent redeems a Parent Access Code (parent_claim_child);
+  /// nothing in the sign-up metadata grants access.
   static Future<AuthResponse> signUpWithEmail({
     required String name,
     required String email,
@@ -310,37 +163,21 @@ class AuthService {
     final cleanPhone = phone.trim();
 
     if (cleanName.isEmpty || normalizedEmail.isEmpty || password.isEmpty) {
-      return const AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: 'All fields are required.',
-      );
+      return const AuthResponse(status: AuthStatus.invalidCredentials, errorMessage: 'All fields are required.');
     }
-
-    if (!normalizedEmail.contains('@') || !normalizedEmail.contains('.')) {
-      return const AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: 'Please enter a valid email address.',
-      );
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
+      return const AuthResponse(status: AuthStatus.invalidCredentials, errorMessage: 'Please enter a valid email address.');
     }
-
     if (password.length < 8) {
-      return const AuthResponse(
-        status: AuthStatus.weakPassword,
-        errorMessage: 'Password must be at least 8 characters.',
-      );
+      return const AuthResponse(status: AuthStatus.weakPassword, errorMessage: 'Password must be at least 8 characters.');
     }
-
     if (password != confirmPassword) {
-      return const AuthResponse(
-        status: AuthStatus.passwordMismatch,
-        errorMessage: 'Passwords do not match.',
-      );
+      return const AuthResponse(status: AuthStatus.passwordMismatch, errorMessage: 'Passwords do not match.');
     }
-
     if (!SupabaseService.isInitialized) {
       return const AuthResponse(
-        status: AuthStatus.backendError,
-        errorMessage: 'Supabase service is not initialized.',
+        status: AuthStatus.networkError,
+        errorMessage: 'The app could not connect to the school server. Please check your connection and restart the app.',
       );
     }
 
@@ -348,144 +185,101 @@ class AuthService {
       final res = await SupabaseService.client.auth.signUp(
         email: normalizedEmail,
         password: password,
-        data: {
-          'full_name': cleanName,
-          'phone': cleanPhone,
-          'role': 'parent',
-        },
+        // Display name / phone only. Role and school are never taken from here.
+        data: {'full_name': cleanName, 'phone': cleanPhone},
       );
-
-      final user = res.user;
-      if (user == null) {
+      if (res.user == null) {
         return const AuthResponse(
           status: AuthStatus.backendError,
-          errorMessage: 'Failed to create parent account. Please try again.',
+          errorMessage: 'The account could not be created. Please try again.',
         );
       }
-
-      // Check if email confirmation is required (session == null)
       if (res.session == null) {
         return const AuthResponse(
           status: AuthStatus.emailConfirmationRequired,
-          userMessage: 'Account created successfully. Please verify your email before signing in.',
+          userMessage: 'Account created. Please verify your email address using the link we sent, then sign in.',
         );
       }
-
-      // Create Parent Profile record
-      final parentProfile = await fetchOrCreateParentProfile(
-        user,
-        name: cleanName,
-        phone: cleanPhone,
-      );
-
-      await saveSession(user.id);
-
-      return AuthResponse(
-        status: AuthStatus.success,
-        parent: parentProfile,
-        children: const [],
-        userMessage: 'Account created successfully!',
-      );
+      return const AuthResponse(status: AuthStatus.success, userMessage: 'Account created. Now link your child.');
     } on AuthException catch (e) {
-      if (kDebugMode) debugPrint('[AuthService] SignUp AuthException: ${e.message}');
       final msg = e.message.toLowerCase();
-      if (msg.contains('already registered') || msg.contains('user_already_exists')) {
+      if (msg.contains('already registered') || msg.contains('user_already_exists') || msg.contains('already exists')) {
         return const AuthResponse(
           status: AuthStatus.alreadyRegistered,
           errorMessage: 'An account with this email already exists. Please sign in.',
         );
-      } else if (msg.contains('weak password') || msg.contains('at least 6') || msg.contains('at least 8')) {
+      }
+      if (msg.contains('password')) {
+        return const AuthResponse(status: AuthStatus.weakPassword, errorMessage: 'Please choose a stronger password (at least 8 characters).');
+      }
+      if (msg.contains('signup') && msg.contains('disabled')) {
         return const AuthResponse(
-          status: AuthStatus.weakPassword,
-          errorMessage: 'Password must be at least 8 characters.',
+          status: AuthStatus.backendError,
+          errorMessage: 'New accounts cannot be created right now. Please contact the school office.',
         );
       }
-      return AuthResponse(
-        status: AuthStatus.backendError,
-        errorMessage: e.message,
-      );
+      return const AuthResponse(status: AuthStatus.backendError, errorMessage: 'The account could not be created. Please try again.');
     } catch (e) {
-      return AuthResponse(
+      return const AuthResponse(
         status: AuthStatus.networkError,
         errorMessage: 'Network error. Please check your internet connection.',
       );
     }
   }
 
-  /// REAL Supabase Auth: Forgot Password / Password Reset Email
   static Future<AuthResponse> resetPassword({required String email}) async {
     final normalizedEmail = email.trim().toLowerCase();
     if (normalizedEmail.isEmpty || !normalizedEmail.contains('@')) {
-      return const AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: 'Please enter a valid email address.',
-      );
+      return const AuthResponse(status: AuthStatus.invalidCredentials, errorMessage: 'Please enter a valid email address.');
     }
-
+    if (!SupabaseService.isInitialized) {
+      return const AuthResponse(status: AuthStatus.networkError, errorMessage: 'Unable to connect to the school server.');
+    }
     try {
       await SupabaseService.client.auth.resetPasswordForEmail(normalizedEmail);
       return const AuthResponse(
         status: AuthStatus.success,
-        userMessage: 'Password reset link has been sent to your email. Please check your inbox.',
+        userMessage: 'If an account exists for this email, a password reset link has been sent.',
       );
-    } on AuthException catch (e) {
-      return AuthResponse(
+    } on AuthException {
+      return const AuthResponse(
         status: AuthStatus.backendError,
-        errorMessage: e.message,
+        errorMessage: 'The reset email could not be sent. Please try again later.',
       );
     } catch (e) {
       return const AuthResponse(
         status: AuthStatus.networkError,
-        errorMessage: 'Network error. Unable to send password reset email.',
+        errorMessage: 'Network error. Unable to send the password reset email.',
       );
     }
   }
 
-  /// REAL Supabase Auth: Update Password
   static Future<AuthResponse> updatePassword({
     required String newPassword,
     required String confirmPassword,
   }) async {
     if (newPassword.isEmpty || confirmPassword.isEmpty) {
-      return const AuthResponse(
-        status: AuthStatus.invalidCredentials,
-        errorMessage: 'Please enter and confirm your new password.',
-      );
+      return const AuthResponse(status: AuthStatus.invalidCredentials, errorMessage: 'Please enter and confirm your new password.');
     }
-
-    if (newPassword.length < 6) {
-      return const AuthResponse(
-        status: AuthStatus.weakPassword,
-        errorMessage: 'New password must be at least 6 characters long.',
-      );
+    if (newPassword.length < 8) {
+      return const AuthResponse(status: AuthStatus.weakPassword, errorMessage: 'New password must be at least 8 characters long.');
     }
-
     if (newPassword != confirmPassword) {
-      return const AuthResponse(
-        status: AuthStatus.passwordMismatch,
-        errorMessage: 'New password confirmation does not match.',
-      );
+      return const AuthResponse(status: AuthStatus.passwordMismatch, errorMessage: 'New password confirmation does not match.');
     }
-
-    if (!SupabaseService.isInitialized || currentUser == null) {
-      return const AuthResponse(
-        status: AuthStatus.backendError,
-        errorMessage: 'No active session found. Please sign in again.',
-      );
+    if (currentUser == null) {
+      return const AuthResponse(status: AuthStatus.backendError, errorMessage: 'No active session found. Please sign in again.');
     }
-
     try {
-      await SupabaseService.client.auth.updateUser(
-        UserAttributes(password: newPassword),
-      );
-      return const AuthResponse(
-        status: AuthStatus.success,
-        userMessage: 'Password updated successfully.',
-      );
+      await SupabaseService.client.auth.updateUser(UserAttributes(password: newPassword));
+      return const AuthResponse(status: AuthStatus.success, userMessage: 'Password updated successfully.');
     } on AuthException catch (e) {
+      final msg = e.message.toLowerCase();
       return AuthResponse(
         status: AuthStatus.backendError,
-        errorMessage: e.message,
+        errorMessage: msg.contains('same') || msg.contains('different')
+            ? 'The new password must be different from the current one.'
+            : 'The password could not be updated. Please try again.',
       );
     } catch (e) {
       return const AuthResponse(
@@ -495,89 +289,9 @@ class AuthService {
     }
   }
 
-  /// Update Non-Privileged Profile Particulars (Name, Phone, Avatar, Relationship)
-  static Future<ParentModel?> updateParentProfile({
-    required ParentModel currentParent,
-    required String name,
-    required String phone,
-    String? avatarUrl,
-    String? relationship,
-  }) async {
-    final updated = currentParent.copyWith(
-      name: name.trim().isNotEmpty ? name.trim() : currentParent.name,
-      phone: phone.trim().isNotEmpty ? phone.trim() : currentParent.phone,
-      avatarUrl: avatarUrl ?? currentParent.avatarUrl,
-      relationship: relationship ?? currentParent.relationship,
-    );
-
-    if (SupabaseService.isInitialized) {
-      try {
-        await SupabaseService.client.from('parents').update({
-          'name': updated.name,
-          'phone': updated.phone,
-          'avatar_url': updated.avatarUrl,
-          'relationship': updated.relationship,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', currentParent.id);
-      } catch (e) {
-        if (kDebugMode) debugPrint('[AuthService] Profile update notice: $e');
-      }
-    }
-
-    return updated;
-  }
-
-  /// Helper: Fetch or create parent profile record linked by Supabase Auth `user.id`
-  static Future<ParentModel> fetchOrCreateParentProfile(
-    User user, {
-    String? name,
-    String? phone,
-  }) async {
-    final userId = user.id;
-    final userEmail = user.email ?? '';
-    final userName = name ?? user.userMetadata?['full_name'] ?? 'Parent User';
-    final userPhone = phone ?? user.userMetadata?['phone'] ?? '';
-
-    final fallbackProfile = ParentModel(
-      id: userId,
-      name: userName,
-      email: userEmail,
-      phone: userPhone,
-      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=300&h=300',
-      status: 'active',
-      childrenIds: const [],
-    );
-
-    if (!SupabaseService.isInitialized) return fallbackProfile;
-
-    try {
-      // Try to fetch existing profile from `parents` or `profiles` table
-      final response = await SupabaseService.client
-          .from('parents')
-          .select()
-          .eq('id', userId)
-          .maybeSingle();
-
-      if (response != null) {
-        return ParentModel.fromMap(response, userId);
-      }
-
-      // Upsert profile if missing
-      final profileMap = {
-        'id': userId,
-        'auth_user_id': userId,
-        'name': userName,
-        'email': userEmail,
-        'phone': userPhone,
-        'status': 'active',
-        'created_at': DateTime.now().toIso8601String(),
-      };
-
-      await SupabaseService.client.from('parents').upsert(profileMap);
-      return fallbackProfile;
-    } catch (e) {
-      if (kDebugMode) debugPrint('[AuthService] Profile table notice: $e');
-      return fallbackProfile;
-    }
+  /// Name and phone of the signed-in parent (`parent_update_contact`).
+  /// Throws [ParentDataException] when the server rejects the change.
+  static Future<void> updateParentContact({required String name, required String phone}) async {
+    await ParentApi.instance.rpc('parent_update_contact', {'p_full_name': name.trim(), 'p_phone': phone.trim()});
   }
 }

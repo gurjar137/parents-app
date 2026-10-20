@@ -66,7 +66,7 @@ class _TimetableScreenState extends State<TimetableScreen> with SingleTickerProv
       );
     }
 
-    if (provider.isTimetableLoading) {
+    if (!provider.hasTimetableData && provider.timetableError == null) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Timetable • ${child.name}', style: AppTextStyles.headingSmall),
@@ -88,7 +88,7 @@ class _TimetableScreenState extends State<TimetableScreen> with SingleTickerProv
       );
     }
 
-    if (provider.timetableError != null) {
+    if (provider.timetableError != null && !provider.isTimetableLoading) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Timetable • ${child.name}', style: AppTextStyles.headingSmall),

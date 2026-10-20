@@ -1,65 +1,46 @@
+// Formerly a live-network test that expected an empty month whenever a query
+// failed. Attendance now comes from get_student_attendance_for_parent (06),
+// which needs a signed-in linked parent; these tests use the fake gateway.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parent_app/core/services/attendance_service.dart';
-import 'package:parent_app/core/services/supabase_service.dart';
+import 'package:parent_app/core/services/parent_api.dart';
 import 'package:parent_app/data/models/attendance_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:shared_preferences/shared_preferences.dart';
+import 'support/fake_parent_api.dart';
 
 void main() {
-  setUpAll(() async {
-    TestWidgetsFlutterBinding.ensureInitialized();
-    SharedPreferences.setMockInitialValues({});
-    await SupabaseService.initialize();
+  late FakeRpc rpc;
+  setUp(() => rpc = FakeRpc()..install());
+
+  test('month request sends the student id and the exact month range', () async {
+    rpc.on('get_student_attendance_for_parent', (_) => [
+          {'id': 'a1', 'student_id': 'st-1', 'attendance_date': '2026-02-03', 'status': 'present'},
+          {'id': 'a2', 'student_id': 'st-1', 'attendance_date': '2026-02-04', 'status': 'ABSENT'},
+        ]);
+    final s = await AttendanceService.fetchAttendanceForStudent(studentId: 'st-1', year: 2026, month: 2);
+    expect(rpc.calls.single.$2, {'p_student_id': 'st-1', 'p_start_date': '2026-02-01', 'p_end_date': '2026-02-28'});
+    expect(s.presentDays, 1);
+    expect(s.absentDays, 1);
+    expect(s.dailyRecords.first.date.day, 4); // newest first
   });
 
-  group('Parent Attendance Real Supabase & Isolation Tests', () {
-    const verifiedStudentId = '56e0bade-7586-4ba4-b16b-bafec3a6aaa8'; // Class 12-F
-    const unrecordedStudentId = 'cf470c43-35df-4b4e-9407-3150ffa1b1da'; // Class 12-A
+  test('status mapping is case-insensitive and leave variants count as leave', () {
+    expect(DailyAttendance.fromMap({'status': 'Late', 'attendance_date': '2026-09-04'}).status, AttendanceStatus.late);
+    expect(DailyAttendance.fromMap({'status': 'on_leave', 'attendance_date': '2026-09-04'}).status, AttendanceStatus.leave);
+  });
 
-    test('1. Today attendance queries real student and maps status properly', () async {
-      final todayRecord = await AttendanceService.fetchTodayAttendance(
-        studentId: verifiedStudentId,
-      );
-      expect(todayRecord?.studentId ?? verifiedStudentId, equals(verifiedStudentId));
+  test('today: no row -> null (not marked yet), never an assumed status', () async {
+    rpc.on('get_student_attendance_for_parent', (_) => []);
+    expect(await AttendanceService.fetchTodayAttendance(studentId: 'st-1'), isNull);
+  });
 
-      // Verify the status mapping logic
-      final testMap = {
-        'id': 'test-123',
-        'student_id': verifiedStudentId,
-        'school_id': '6254bee9-151d-4332-8a1c-3994af7d2153',
-        'attendance_date': '2026-09-04',
-        'status': 'present'
-      };
-      final parsed = DailyAttendance.fromMap(testMap);
-      expect(parsed.status, equals(AttendanceStatus.present));
-      expect(parsed.studentId, equals(verifiedStudentId));
-      expect(parsed.date.year, equals(2026));
-      expect(parsed.date.month, equals(9));
-      expect(parsed.date.day, equals(4));
-    });
-
-    test('2. Cross-student isolation: Unrecorded student has no attendance', () async {
-      final summary = await AttendanceService.fetchAttendanceForStudent(
-        studentId: unrecordedStudentId,
-        year: 2026,
-        month: 9,
-      );
-
-      // Must be empty, no cross-student leakage
-      expect(summary.dailyRecords.isEmpty, isTrue);
-      expect(summary.totalWorkingDays, equals(0));
-      expect(summary.presentDays, equals(0));
-    });
-
-    test('3. No demo/mock fallback when no records found', () async {
-      final summary = await AttendanceService.fetchAttendanceForStudent(
-        studentId: 'non-existent-uuid',
-        year: 2026,
-        month: 9,
-      );
-
-      expect(summary.dailyRecords, isEmpty);
-      expect(summary.percentage, equals(0.0));
-    });
+  test('a child that is not linked is refused, not shown as an empty month', () async {
+    rpc.on('get_student_attendance_for_parent',
+        (_) => throw const PostgrestException(message: 'not allowed', code: '42501'));
+    expect(
+      () => AttendanceService.fetchAttendanceForStudent(studentId: 'someone-else', year: 2026, month: 9),
+      throwsA(isA<ParentDataException>()),
+    );
   });
 }

@@ -22,8 +22,8 @@ class PtmScreen extends StatelessWidget {
         appBar: AppBar(title: const Text('Parent-Teacher Meeting')),
         body: const EmptyStateWidget(
           icon: Icons.groups_outlined,
-          title: 'No PTM Scheduled',
-          description: 'Upcoming Parent-Teacher Meeting schedules will be announced here.',
+          title: 'PTM schedule not available',
+          description: 'Parent-teacher meeting schedules is not available in the Parents App yet. Please contact the school office. Meeting notices from the school appear under Notices.',
         ),
       );
     }

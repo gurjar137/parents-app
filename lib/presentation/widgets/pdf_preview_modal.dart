@@ -83,58 +83,24 @@ class PdfPreviewModal extends StatelessWidget {
             ),
           ),
 
-          // Action Toolbar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: AppColors.subSurface,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildActionButton(
-                  icon: Icons.download_rounded,
-                  label: 'Download',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Downloading $documentName...'),
-                        backgroundColor: AppColors.brandIndigo,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                    if (onDownload != null) onDownload!();
-                  },
-                ),
-                _buildActionButton(
-                  icon: Icons.share_rounded,
-                  label: 'Share',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Sharing $documentName...'),
-                        backgroundColor: AppColors.brandIndigo,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                    if (onShare != null) onShare!();
-                  },
-                ),
-                _buildActionButton(
-                  icon: Icons.print_rounded,
-                  label: 'Print',
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Sending $documentName to printer...'),
-                        backgroundColor: AppColors.brandIndigo,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                    if (onPrint != null) onPrint!();
-                  },
-                ),
-              ],
+          // Action toolbar: only actions that are wired to a real handler are
+          // shown (these used to show "Downloading..." without doing anything).
+          if (onDownload != null || onShare != null || onPrint != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: AppColors.subSurface,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  if (onDownload != null)
+                    _buildActionButton(icon: Icons.download_rounded, label: 'Download', onTap: onDownload!),
+                  if (onShare != null)
+                    _buildActionButton(icon: Icons.copy_rounded, label: 'Copy', onTap: onShare!),
+                  if (onPrint != null)
+                    _buildActionButton(icon: Icons.print_rounded, label: 'Print', onTap: onPrint!),
+                ],
+              ),
             ),
-          ),
 
           // Paper / Document Content Area
           Expanded(

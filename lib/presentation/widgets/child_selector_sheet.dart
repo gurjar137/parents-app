@@ -104,7 +104,12 @@ class ChildSelectorSheet extends StatelessWidget {
                         children: [
                           CircleAvatar(
                             radius: 26,
-                            backgroundImage: NetworkImage(child.avatarUrl),
+                            backgroundColor: AppColors.brandIndigo,
+                            backgroundImage: child.avatarUrl.startsWith('http') ? NetworkImage(child.avatarUrl) : null,
+                            child: child.avatarUrl.startsWith('http')
+                                ? null
+                                : Text(child.name.isNotEmpty ? child.name[0].toUpperCase() : '?',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -119,7 +124,7 @@ class ChildSelectorSheet extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '${child.grade} (${child.className}) • Roll No. ${child.rollNo}',
+                                  [child.className, if (child.rollNo > 0) 'Roll No. ${child.rollNo}', if (child.schoolName.isNotEmpty) child.schoolName].where((p) => p.isNotEmpty).join(' • '),
                                   style: AppTextStyles.bodySmall,
                                 ),
                               ],

@@ -10,6 +10,8 @@ class SchoolBrandModel {
   final String address;
   final String phone;
   final String email;
+  final String schoolCode;
+  final String currentAcademicYear;
 
   const SchoolBrandModel({
     required this.schoolName,
@@ -21,40 +23,27 @@ class SchoolBrandModel {
     this.address = '',
     this.phone = '',
     this.email = '',
+    this.schoolCode = '',
+    this.currentAcademicYear = '',
   });
 
-  /// Factory to parse authoritative database record from public.schools
+  /// School record from `parent_get_school`. Fields the school has not
+  /// filled in stay empty; no affiliation, motto or contact is invented.
   factory SchoolBrandModel.fromMap(Map<String, dynamic> map, {String fallbackName = 'School Portal'}) {
-    final rawName = (map['name'] ?? map['school_name'] ?? map['title'])?.toString().trim();
-    final cleanName = (rawName != null && rawName.isNotEmpty) ? rawName : fallbackName;
-
-    final rawLogo = (map['logo_url'] ?? map['logo'] ?? map['avatar_url'])?.toString().trim();
-    final cleanLogo = (rawLogo != null && rawLogo.isNotEmpty) ? rawLogo : '';
-
-    final rawAffiliation = (map['affiliation'] ?? map['board'] ?? map['board_name'])?.toString().trim();
-    final cleanAffiliation = (rawAffiliation != null && rawAffiliation.isNotEmpty)
-        ? rawAffiliation
-        : 'Affiliated Institution';
-
-    final rawMotto = (map['motto'] ?? map['tagline'] ?? map['description'])?.toString().trim();
-    final cleanMotto = (rawMotto != null && rawMotto.isNotEmpty)
-        ? rawMotto
-        : 'Excellence in Education & Character';
-
-    final rawAddress = (map['address'] ?? map['location'] ?? map['city'])?.toString().trim() ?? '';
-    final rawPhone = (map['phone'] ?? map['contact_number'] ?? map['mobile'])?.toString().trim() ?? '';
-    final rawEmail = (map['email'] ?? map['contact_email'])?.toString().trim() ?? '';
-
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString().trim();
+    final ay = map['current_academic_year'] is Map ? Map<String, dynamic>.from(map['current_academic_year'] as Map) : const {};
     return SchoolBrandModel(
-      schoolName: cleanName,
-      logoUrl: cleanLogo,
+      schoolName: s(map['name']).isNotEmpty ? s(map['name']) : fallbackName,
+      logoUrl: s(map['logo_url']),
       primaryColor: const Color(0xFF10182D),
       secondaryColor: const Color(0xFF4F46E5),
-      affiliation: cleanAffiliation,
-      motto: cleanMotto,
-      address: rawAddress,
-      phone: rawPhone,
-      email: rawEmail,
+      affiliation: '',
+      motto: '',
+      address: s(map['address']),
+      phone: s(map['phone']),
+      email: s(map['email']),
+      schoolCode: s(map['code']),
+      currentAcademicYear: s(ay['name']),
     );
   }
 
@@ -65,8 +54,8 @@ class SchoolBrandModel {
       logoUrl: '',
       primaryColor: const Color(0xFF10182D),
       secondaryColor: const Color(0xFF4F46E5),
-      affiliation: 'Authorized School Portal',
-      motto: 'Excellence in Education',
+      affiliation: '',
+      motto: '',
       address: '',
       phone: '',
       email: '',

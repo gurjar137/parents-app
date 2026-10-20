@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:parent_app/core/services/auth_service.dart';
+
+import 'support/fake_parent_api.dart';
 import 'package:parent_app/core/services/supabase_service.dart';
 import 'package:parent_app/core/theme/app_colors.dart';
 import 'package:parent_app/data/models/attendance_model.dart';
@@ -340,9 +343,11 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      final provider = ParentAppProvider();
-      await provider.checkExistingSession();
-      provider.selectChild(testStudentLong);
+      final rpc = FakeRpc()..install();
+      installEmptyChildData(rpc);
+      final provider = ParentAppProvider(autoStart: false)
+        ..debugSetSession(ParentSession.fromJson(sessionJson()).parent, [testStudentLong]);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
 
       await tester.pumpWidget(
         ChangeNotifierProvider<ParentAppProvider>.value(
@@ -370,9 +375,11 @@ void main() {
         tester.view.resetDevicePixelRatio();
       });
 
-      final provider = ParentAppProvider();
-      await provider.checkExistingSession();
-      provider.selectChild(testStudentLong);
+      final rpc = FakeRpc()..install();
+      installEmptyChildData(rpc);
+      final provider = ParentAppProvider(autoStart: false)
+        ..debugSetSession(ParentSession.fromJson(sessionJson()).parent, [testStudentLong]);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
 
       await tester.pumpWidget(
         ChangeNotifierProvider<ParentAppProvider>.value(

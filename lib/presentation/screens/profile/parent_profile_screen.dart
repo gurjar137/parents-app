@@ -46,7 +46,12 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
                   children: [
                     CircleAvatar(
                       radius: 32,
-                      backgroundImage: NetworkImage(parent.avatarUrl),
+                      backgroundColor: AppColors.brandIndigo,
+                      backgroundImage: parent.avatarUrl.startsWith('http') ? NetworkImage(parent.avatarUrl) : null,
+                      child: parent.avatarUrl.startsWith('http')
+                          ? null
+                          : Text(parent.name.isNotEmpty ? parent.name[0].toUpperCase() : '?',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -125,7 +130,12 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
                         children: [
                           CircleAvatar(
                             radius: 24,
-                            backgroundImage: NetworkImage(child.avatarUrl),
+                            backgroundColor: AppColors.brandIndigo,
+                            backgroundImage: child.avatarUrl.startsWith('http') ? NetworkImage(child.avatarUrl) : null,
+                            child: child.avatarUrl.startsWith('http')
+                                ? null
+                                : Text(child.name.isNotEmpty ? child.name[0].toUpperCase() : '?',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -148,7 +158,7 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
                                     ],
                                   ],
                                 ),
-                                Text('Class ${child.className} • Roll No. ${child.rollNo} • ID: ${child.id}', style: AppTextStyles.bodySmall),
+                                Text(['Class ${child.className}', if (child.rollNo > 0) 'Roll No. ${child.rollNo}', if (child.admissionNo.isNotEmpty) 'Adm. ${child.admissionNo}'].join(' • '), style: AppTextStyles.bodySmall),
                               ],
                             ),
                           ),
@@ -355,15 +365,20 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandIndigo),
                   onPressed: () async {
-                    await provider.updateProfile(
+                    final ok = await provider.updateProfile(
                       name: nameCtrl.text,
                       phone: phoneCtrl.text,
                       relationship: relCtrl.text,
                     );
                     if (context.mounted) {
-                      Navigator.pop(context);
+                      if (ok) Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Profile updated successfully.')),
+                        SnackBar(
+                          content: Text(ok
+                              ? 'Profile updated.'
+                              : 'The profile could not be saved. Check the name and phone number and try again.'),
+                          backgroundColor: ok ? AppColors.success : AppColors.danger,
+                        ),
                       );
                     }
                   },

@@ -7,6 +7,7 @@ import '../../../data/models/exam_model.dart';
 import '../../../providers/parent_app_provider.dart';
 import '../../widgets/animated_card.dart';
 import '../../widgets/empty_state_widget.dart';
+import '../../widgets/load_state_view.dart';
 import '../../widgets/status_badge.dart';
 
 class ExamsScreen extends StatefulWidget {
@@ -56,12 +57,18 @@ class _ExamsScreenState extends State<ExamsScreen> with SingleTickerProviderStat
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildExamList(context, upcomingExams, 'No upcoming exams scheduled'),
-          _buildExamList(context, pastExams, 'No past examination history'),
-        ],
+      body: LoadStateView(
+        isLoading: provider.isExamsLoading,
+        error: provider.examsError,
+        hasData: provider.hasExamsData,
+        onRetry: provider.loadExamsForSelectedChild,
+        builder: (context) => TabBarView(
+          controller: _tabController,
+          children: [
+            _buildExamList(context, upcomingExams, 'No upcoming exams scheduled'),
+            _buildExamList(context, pastExams, 'No past examination history'),
+          ],
+        ),
       ),
     );
   }
@@ -96,7 +103,7 @@ class _ExamsScreenState extends State<ExamsScreen> with SingleTickerProviderStat
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        exam.subject,
+                        exam.subject.isNotEmpty ? exam.subject : 'All subjects',
                         style: AppTextStyles.caption.copyWith(color: AppColors.brandBlue, fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -113,7 +120,12 @@ class _ExamsScreenState extends State<ExamsScreen> with SingleTickerProviderStat
                   children: [
                     const Icon(Icons.event_available_rounded, size: 16, color: AppColors.brandIndigo),
                     const SizedBox(width: 6),
-                    Text(DateFormatter.formatFull(exam.examDate), style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                    Flexible(
+                      child: Text(
+                        exam.examDate != null ? DateFormatter.formatFull(exam.examDate!) : 'Date not announced',
+                        style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -121,9 +133,18 @@ class _ExamsScreenState extends State<ExamsScreen> with SingleTickerProviderStat
                   children: [
                     const Icon(Icons.schedule_rounded, size: 14, color: AppColors.textMuted),
                     const SizedBox(width: 6),
-                    Text('${exam.timeSlot} • ${exam.roomNo}', style: AppTextStyles.bodySmall),
-                    const Spacer(),
-                    Text('Max: ${exam.totalMarks.toInt()} Marks', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
+                    Expanded(
+                      child: Text(
+                        [exam.timeSlot, exam.roomNo].where((p) => p.isNotEmpty).join(' • ').isEmpty
+                            ? 'Time not announced'
+                            : [exam.timeSlot, exam.roomNo].where((p) => p.isNotEmpty).join(' • '),
+                        style: AppTextStyles.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (exam.totalMarks > 0)
+                      Text('Max: ${exam.totalMarks.toStringAsFixed(exam.totalMarks % 1 == 0 ? 0 : 1)} Marks',
+                          style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
                   ],
                 ),
               ],

@@ -4,7 +4,6 @@ import '../../../core/services/link_child_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../providers/parent_app_provider.dart';
-import '../../main_navigation_screen.dart';
 
 class LinkChildScreen extends StatefulWidget {
   final bool isFirstTimeSetup;
@@ -41,7 +40,7 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
     final code = _codeController.text.trim();
     if (code.isEmpty) {
       setState(() {
-        _errorMessage = 'Please enter your Student ID or Parent Linking Code.';
+        _errorMessage = 'Please enter the Parent Access Code from your school.';
       });
       return;
     }
@@ -67,16 +66,14 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
         ),
       );
 
-      if (widget.isFirstTimeSetup) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-        );
-      } else {
+      // First-time setup is the root screen: main.dart switches to the
+      // dashboard as soon as the verified session has a linked child.
+      if (!widget.isFirstTimeSetup && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
     } else {
       setState(() {
-        _errorMessage = res.errorMessage ?? 'Student ID or Linking Code not found.';
+        _errorMessage = res.errorMessage ?? 'This Parent Access Code was not accepted.';
       });
     }
   }
@@ -95,6 +92,14 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
         ),
         elevation: 0,
         automaticallyImplyLeading: !widget.isFirstTimeSetup,
+        actions: [
+          if (widget.isFirstTimeSetup)
+            TextButton.icon(
+              onPressed: _isLoading ? null : () => provider.logout(),
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: const Text('Sign out'),
+            ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

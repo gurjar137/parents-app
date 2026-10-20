@@ -146,7 +146,7 @@ class HomeScreen extends StatelessWidget {
     final results = provider.currentResultsList;
     final notices = provider.notices;
 
-    final pendingHwCount = homeworkList.where((h) => !h.isCompleted).length;
+    final pendingHwCount = homeworkList.where((h) => !h.isOverdue).length;
     final latestResult = results.isNotEmpty ? results.first : null;
     final nextClass = provider.nextClassEntry;
 
@@ -165,7 +165,7 @@ class HomeScreen extends StatelessWidget {
       ));
     }
     if (pendingHwCount > 0) {
-      final nextHw = homeworkList.firstWhere((h) => !h.isCompleted);
+      final nextHw = homeworkList.lastWhere((h) => !h.isOverdue);
       attentionAlerts.add(AttentionAlertItem(
         icon: Icons.assignment_rounded,
         title: '${nextHw.subject} Homework Due Soon',
@@ -183,7 +183,7 @@ class HomeScreen extends StatelessWidget {
       attentionAlerts.add(AttentionAlertItem(
         icon: Icons.school_rounded,
         title: '${latestResult.examName} Result Published',
-        subtitle: 'Scored ${latestResult.overallPercentage.toStringAsFixed(1)}% (Grade ${latestResult.overallGrade})',
+        subtitle: 'Scored ${latestResult.overallPercentage.toStringAsFixed(1)}%',
         color: AppColors.holiday,
         onTap: () {
           provider.setBottomNavIndex(3);

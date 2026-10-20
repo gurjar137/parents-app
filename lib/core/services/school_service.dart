@@ -1,50 +1,20 @@
-import 'package:flutter/foundation.dart';
 import '../../data/models/school_brand_model.dart';
-import 'supabase_service.dart';
+import 'parent_api.dart';
 
 class SchoolService {
   static final Map<String, SchoolBrandModel> _cache = {};
 
-  /// Resolves the authoritative school record from public.schools using canonical school ID
-  static Future<SchoolBrandModel> fetchSchoolBrand(String schoolId) async {
-    final cleanId = schoolId.trim();
-
-    if (cleanId.isEmpty) {
-      return SchoolBrandModel.defaultNeutral();
-    }
-
-    if (_cache.containsKey(cleanId)) {
-      return _cache[cleanId]!;
-    }
-
-    if (SupabaseService.isInitialized) {
-      try {
-        final res = await SupabaseService.client
-            .from('schools')
-            .select()
-            .eq('id', cleanId)
-            .maybeSingle();
-
-        if (res != null) {
-          final brand = SchoolBrandModel.fromMap(res);
-          _cache[cleanId] = brand;
-          return brand;
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[SchoolService] Notice resolving school record for $cleanId: $e');
-        }
-      }
-    }
-
-    // Default neutral branding bound to this specific school ID without any hardcoded Xavier/KPS fallback
-    final neutralBrand = SchoolBrandModel.defaultNeutral();
-    _cache[cleanId] = neutralBrand;
-    return neutralBrand;
+  /// School of a linked child (`parent_get_school`). Cached per student for
+  /// the session; cleared on logout and child-link changes.
+  static Future<SchoolBrandModel> fetchSchoolForStudent(String studentId) async {
+    if (studentId.isEmpty) return SchoolBrandModel.defaultNeutral();
+    final cached = _cache[studentId];
+    if (cached != null) return cached;
+    final json = await ParentApi.instance.rpcObject('parent_get_school', {'p_student_id': studentId});
+    final brand = SchoolBrandModel.fromMap(json);
+    _cache[studentId] = brand;
+    return brand;
   }
 
-  /// Clears in-memory school cache on logout or account switch
-  static void clearCache() {
-    _cache.clear();
-  }
+  static void clearCache() => _cache.clear();
 }

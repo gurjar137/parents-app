@@ -3,18 +3,22 @@ class StudentModel {
   final String name;
   final String? fatherName;
   final String? motherName;
-  final String className; // e.g. "8-A" or "5-B"
-  final String grade; // e.g. "Class 8"
+  final String className; // display label, e.g. "8-A"
+  final String grade; // class as stored, e.g. "8"
   final String section; // e.g. "A"
-  final int rollNo;
+  final int rollNo; // 0 = not assigned
   final String admissionNo;
-  final String avatarUrl;
-  final String academicYear;
-  final String houseName;
-  final String classTeacher;
-  final int classmateCount;
+  final String avatarUrl; // '' = none
+  final String academicYear; // session name, '' = unknown
+  final String houseName; // '' = not recorded
+  final String classTeacher; // '' = not recorded
+  final int classmateCount; // 0 = unknown
   final String schoolId;
+  final String schoolName;
   final String? linkingCode;
+  final String gender;
+  final DateTime? dateOfBirth;
+  final String relationship;
 
   const StudentModel({
     required this.id,
@@ -32,7 +36,11 @@ class StudentModel {
     required this.classTeacher,
     required this.classmateCount,
     this.schoolId = '',
+    this.schoolName = '',
     this.linkingCode,
+    this.gender = '',
+    this.dateOfBirth,
+    this.relationship = '',
   });
 
   /// Formatted father's name with standard 'Not provided' fallback
@@ -45,51 +53,55 @@ class StudentModel {
     return 'Not provided';
   }
 
-  factory StudentModel.fromMap(Map<String, dynamic> map, String fallbackId) {
-    final gradeStr = map['grade'] ?? map['class'] ?? 'Class 8';
-    final sectionStr = map['section'] ?? 'A';
-    final computedClassName = map['class_name'] ?? '$gradeStr-$sectionStr';
-
-    final rawFather = map['father_name'] ??
-        map['father_full_name'] ??
-        map['fatherName'];
-    final cleanFather = (rawFather != null &&
-            rawFather.toString().trim().isNotEmpty &&
-            rawFather.toString().trim().toLowerCase() != 'null')
-        ? rawFather.toString().trim()
-        : null;
-
-    final rawMother = map['mother_name'] ??
-        map['mother_full_name'] ??
-        map['motherName'];
-    final cleanMother = (rawMother != null &&
-            rawMother.toString().trim().isNotEmpty &&
-            rawMother.toString().trim().toLowerCase() != 'null')
-        ? rawMother.toString().trim()
-        : null;
-
+  /// One linked child from `parent_get_session`. Only fields the school
+  /// actually stores are filled; missing ones stay empty (never invented).
+  factory StudentModel.fromSession(Map<String, dynamic> map) {
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString().trim();
+    final cls = s(map['class_name']);
+    final sec = s(map['section_name']);
     return StudentModel(
-      id: map['id'] ?? map['student_id'] ?? fallbackId,
-      name: map['name'] ?? map['full_name'] ?? map['student_name'] ?? 'Student',
-      fatherName: cleanFather,
-      motherName: cleanMother,
-      className: computedClassName,
-      grade: gradeStr,
-      section: sectionStr,
-      rollNo: map['roll_no'] is int
-          ? map['roll_no']
-          : int.tryParse(map['roll_no']?.toString() ?? '1') ?? 1,
-      admissionNo: map['admission_no'] ?? map['student_id'] ?? fallbackId,
-      avatarUrl: map['avatar_url'] ??
-          'https://images.unsplash.com/photo-1544717305-2782549b5136?fit=crop&w=300&h=300',
-      academicYear: map['academic_year'] ?? '2025-2026',
-      houseName: map['house_name'] ?? 'Ruby House',
-      classTeacher: map['class_teacher'] ?? 'Mrs. Sunita Sharma',
-      classmateCount: map['classmate_count'] is int
-          ? map['classmate_count']
-          : int.tryParse(map['classmate_count']?.toString() ?? '34') ?? 34,
-      schoolId: (map['school_id'] ?? '').toString(),
-      linkingCode: map['linking_code'] ?? map['parent_linking_code'] ?? map['access_code'],
+      id: s(map['id']),
+      name: s(map['name']).isNotEmpty ? s(map['name']) : 'Student',
+      className: [cls, sec].where((p) => p.isNotEmpty).join('-'),
+      grade: cls,
+      section: sec,
+      rollNo: int.tryParse(s(map['roll_number'])) ?? 0,
+      admissionNo: s(map['admission_number']),
+      avatarUrl: '',
+      academicYear: s(map['academic_year_name']),
+      houseName: '',
+      classTeacher: '',
+      classmateCount: 0,
+      schoolId: s(map['school_id']),
+      schoolName: s(map['school_name']),
+      gender: s(map['gender']),
+      dateOfBirth: DateTime.tryParse(s(map['date_of_birth'])),
+      relationship: s(map['relationship']),
+    );
+  }
+
+  factory StudentModel.fromMap(Map<String, dynamic> map, String fallbackId) {
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString().trim();
+    final grade = s(map['grade']).isNotEmpty ? s(map['grade']) : s(map['class_name']);
+    final section = s(map['section']).isNotEmpty ? s(map['section']) : s(map['section_name']);
+    return StudentModel(
+      id: s(map['id']).isNotEmpty ? s(map['id']) : fallbackId,
+      name: s(map['name']).isNotEmpty ? s(map['name']) : 'Student',
+      fatherName: s(map['father_name']).isEmpty ? null : s(map['father_name']),
+      motherName: s(map['mother_name']).isEmpty ? null : s(map['mother_name']),
+      className: [grade, section].where((p) => p.isNotEmpty).join('-'),
+      grade: grade,
+      section: section,
+      rollNo: int.tryParse(s(map['roll_no'] ?? map['roll_number'])) ?? 0,
+      admissionNo: s(map['admission_no'] ?? map['admission_number']),
+      avatarUrl: s(map['avatar_url']),
+      academicYear: s(map['academic_year']),
+      houseName: s(map['house_name']),
+      classTeacher: s(map['class_teacher']),
+      classmateCount: int.tryParse(s(map['classmate_count'])) ?? 0,
+      schoolId: s(map['school_id']),
+      schoolName: s(map['school_name']),
+      linkingCode: s(map['linking_code']).isEmpty ? null : s(map['linking_code']),
     );
   }
 
@@ -110,6 +122,7 @@ class StudentModel {
       'class_teacher': classTeacher,
       'classmate_count': classmateCount,
       'school_id': schoolId,
+      'school_name': schoolName,
       'linking_code': linkingCode,
     };
   }

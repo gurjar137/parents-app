@@ -119,7 +119,7 @@ class _CorrectionRequestDialogState extends State<CorrectionRequestDialog> {
         ElevatedButton(
           onPressed: () {
             if (_formKey.currentState!.validate()) {
-              provider.submitCorrectionRequest(
+              final sent = provider.submitCorrectionRequest(
                 fieldName: _selectedField,
                 currentValue: _currentValueController.text.trim(),
                 requestedValue: _requestedValueController.text.trim(),
@@ -127,9 +127,11 @@ class _CorrectionRequestDialogState extends State<CorrectionRequestDialog> {
               );
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Correction request submitted to School Admin for verification.'),
-                  backgroundColor: AppColors.brandIndigo,
+                SnackBar(
+                  content: Text(sent
+                      ? 'Correction request sent to the school.'
+                      : 'Correction requests cannot be sent from the app yet. Please contact the school office.'),
+                  backgroundColor: sent ? AppColors.brandIndigo : AppColors.warning,
                 ),
               );
             }

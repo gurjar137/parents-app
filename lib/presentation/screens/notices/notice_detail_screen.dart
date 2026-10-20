@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/utils/date_formatter.dart';
@@ -55,12 +56,11 @@ class NoticeDetailScreen extends StatelessWidget {
               Text('Official Attachments', style: AppTextStyles.headingSmall),
               const SizedBox(height: 10),
               InkWell(
-                onTap: () {
+                onTap: () async {
+                  await Clipboard.setData(ClipboardData(text: notice.attachmentUrl ?? ''));
+                  if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Downloading attachment: ${notice.attachmentName}...'),
-                      backgroundColor: AppColors.brandIndigo,
-                    ),
+                    const SnackBar(content: Text('Attachment link copied. Paste it into your browser to open it.')),
                   );
                 },
                 borderRadius: BorderRadius.circular(16),

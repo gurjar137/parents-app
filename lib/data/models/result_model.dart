@@ -1,38 +1,47 @@
+/// Marks of one subject in a published exam (`parent_get_results`).
 class SubjectResultModel {
   final String subject;
   final double maxMarks;
-  final double obtainedMarks;
-  final String grade;
+  final double? obtainedMarks; // null = absent / exempted / not entered
+  final double? passingMarks;
+  final String status; // 'PRESENT', 'ABSENT', 'EXEMPTED', 'NOT_APPEARED' or ''
   final String? teacherComment;
 
   const SubjectResultModel({
     required this.subject,
     required this.maxMarks,
     required this.obtainedMarks,
-    required this.grade,
+    this.passingMarks,
+    this.status = '',
     this.teacherComment,
   });
 
-  double get percentage => maxMarks > 0 ? (obtainedMarks / maxMarks) * 100 : 0.0;
+  /// No letter grade is stored by the school; the screen shows marks only.
+  String get grade => '';
 
-  factory SubjectResultModel.fromMap(Map<String, dynamic> map) {
-    return SubjectResultModel(
-      subject: map['subject'] ?? map['subject_name'] ?? 'Subject',
-      maxMarks: (map['max_marks'] ?? map['total_marks'] ?? 100).toDouble(),
-      obtainedMarks: (map['obtained_marks'] ?? map['marks'] ?? 0).toDouble(),
-      grade: map['grade'] ?? 'A',
-      teacherComment: map['remarks'] ?? map['comment'],
-    );
+  double get percentage =>
+      (maxMarks > 0 && obtainedMarks != null) ? (obtainedMarks! / maxMarks) * 100 : 0.0;
+
+  bool get isAbsent => {'ABSENT', 'NOT_APPEARED'}.contains(status.toUpperCase());
+
+  /// true/false only when the school recorded passing marks for the subject.
+  bool? get passed {
+    if (passingMarks == null || obtainedMarks == null) return null;
+    return obtainedMarks! >= passingMarks!;
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'subject': subject,
-      'max_marks': maxMarks,
-      'obtained_marks': obtainedMarks,
-      'grade': grade,
-      'remarks': teacherComment,
-    };
+  factory SubjectResultModel.fromMap(Map<String, dynamic> map) {
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString().trim();
+    double? d(dynamic v) => s(v).isEmpty ? null : double.tryParse(s(v));
+    final status = s(map['status']).toUpperCase();
+    return SubjectResultModel(
+      subject: s(map['subject_name']).isNotEmpty ? s(map['subject_name']) : 'Subject',
+      maxMarks: d(map['max_marks']) ?? 0,
+      obtainedMarks: {'ABSENT', 'NOT_APPEARED', 'EXEMPTED'}.contains(status) ? null : d(map['marks_obtained']),
+      passingMarks: d(map['passing_marks']),
+      status: status,
+      teacherComment: s(map['remarks']).isEmpty ? null : s(map['remarks']),
+    );
   }
 }
 
@@ -40,80 +49,54 @@ class ExamResultModel {
   final String id;
   final String studentId;
   final String schoolId;
-  final String examName; // e.g. "Unit Test 1", "Mid Term", "Final Examination"
-  final String academicSession; // "2026-2027"
-  final DateTime examDate;
+  final String examName;
+  final String academicSession;
+  final DateTime? examDate;
   final List<SubjectResultModel> subjects;
-  final String overallGrade;
-  final String teacherRemarks;
   final bool isPublished;
-  final String? reportCardUrl;
 
   const ExamResultModel({
     required this.id,
     required this.studentId,
     this.schoolId = '',
     required this.examName,
-    this.academicSession = '2026-2027',
+    this.academicSession = '',
     required this.examDate,
     required this.subjects,
-    required this.overallGrade,
-    required this.teacherRemarks,
     this.isPublished = true,
-    this.reportCardUrl,
   });
 
-  double get totalObtained => subjects.fold(0.0, (sum, item) => sum + item.obtainedMarks);
-  double get totalMax => subjects.fold(0.0, (sum, item) => sum + item.maxMarks);
+  List<SubjectResultModel> get _scored =>
+      subjects.where((s) => s.obtainedMarks != null && s.maxMarks > 0).toList();
+
+  double get totalObtained => _scored.fold(0.0, (sum, s) => sum + s.obtainedMarks!);
+  double get totalMax => _scored.fold(0.0, (sum, s) => sum + s.maxMarks);
   double get overallPercentage => totalMax > 0 ? (totalObtained / totalMax) * 100 : 0.0;
-  String get resultStatus => overallPercentage >= 40.0 ? 'PASS' : 'FAIL';
 
-  factory ExamResultModel.fromMap(Map<String, dynamic> map, String fallbackStudentId) {
-    DateTime parseDate(dynamic val) {
-      if (val is String) {
-        return DateTime.tryParse(val) ?? DateTime.now();
-      } else if (val is DateTime) {
-        return val;
-      }
-      return DateTime.now();
-    }
+  /// No overall grade or remark is stored by the school.
+  String get overallGrade => '';
+  String get teacherRemarks => '';
+  String? get reportCardUrl => null;
 
-    final rawSubjects = map['subjects'] ?? map['subject_marks'] ?? [];
-    List<SubjectResultModel> subjectList = [];
-    if (rawSubjects is List) {
-      subjectList = rawSubjects
-          .map((item) => SubjectResultModel.fromMap(item as Map<String, dynamic>))
-          .toList();
-    }
-
-    return ExamResultModel(
-      id: map['id'] ?? map['exam_id'] ?? 'EXAM-${DateTime.now().millisecondsSinceEpoch}',
-      studentId: map['student_id'] ?? fallbackStudentId,
-      schoolId: map['school_id'] ?? '',
-      examName: map['exam_name'] ?? map['name'] ?? 'Term Examination',
-      academicSession: map['academic_session'] ?? map['session'] ?? '2026-2027',
-      examDate: parseDate(map['exam_date'] ?? map['created_at']),
-      subjects: subjectList,
-      overallGrade: map['overall_grade'] ?? map['grade'] ?? 'A',
-      teacherRemarks: map['teacher_remarks'] ?? map['remarks'] ?? 'Good performance.',
-      isPublished: map['is_published'] ?? map['status'] == 'published',
-      reportCardUrl: map['report_card_url'] ?? map['pdf_url'],
-    );
+  /// 'PASS' / 'FAIL' only when every subject has passing marks recorded;
+  /// otherwise '' (the school's pass rule is not known to the app).
+  String get resultStatus {
+    if (subjects.isEmpty) return '';
+    final verdicts = subjects.map((s) => s.passed).toList();
+    if (verdicts.any((v) => v == null)) return '';
+    return verdicts.every((v) => v == true) ? 'PASS' : 'FAIL';
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'student_id': studentId,
-      'school_id': schoolId,
-      'exam_name': examName,
-      'academic_session': academicSession,
-      'exam_date': examDate.toIso8601String().split('T').first,
-      'subjects': subjects.map((s) => s.toMap()).toList(),
-      'overall_grade': overallGrade,
-      'teacher_remarks': teacherRemarks,
-      'is_published': isPublished,
-      'report_card_url': reportCardUrl,
-    };
+  factory ExamResultModel.fromMap(Map<String, dynamic> map, String studentId) {
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString().trim();
+    final rawSubjects = map['subjects'] is List ? map['subjects'] as List : const [];
+    return ExamResultModel(
+      id: s(map['exam_id']).isNotEmpty ? s(map['exam_id']) : s(map['id']),
+      studentId: studentId,
+      examName: s(map['name']).isNotEmpty ? s(map['name']) : 'Examination',
+      academicSession: s(map['academic_year']),
+      examDate: DateTime.tryParse(s(map['start_date'])),
+      subjects: rawSubjects.whereType<Map>().map((m) => SubjectResultModel.fromMap(Map<String, dynamic>.from(m))).toList(),
+    );
   }
 }

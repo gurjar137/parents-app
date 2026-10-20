@@ -1,25 +1,22 @@
 class NoticeModel {
   final String id;
   final String schoolId;
-  final String? className;
-  final String? studentId;
   final String title;
-  final String category; // "All", "Important", "Academic", "Events", "Holiday"
+  final String category;
   final DateTime date;
   final String shortDescription;
   final String fullDescription;
-  final String publisherName;
+  final String publisherName; // the school does not store an author name
   final String? attachmentName;
   final String? attachmentType;
   final String? attachmentUrl;
   final bool isImportant;
+  final bool isPinned;
   final bool isRead;
 
   const NoticeModel({
     required this.id,
     this.schoolId = '',
-    this.className,
-    this.studentId,
     required this.title,
     required this.category,
     required this.date,
@@ -30,6 +27,7 @@ class NoticeModel {
     this.attachmentType,
     this.attachmentUrl,
     this.isImportant = false,
+    this.isPinned = false,
     this.isRead = false,
   });
 
@@ -37,8 +35,6 @@ class NoticeModel {
     return NoticeModel(
       id: id,
       schoolId: schoolId,
-      className: className,
-      studentId: studentId,
       title: title,
       category: category,
       date: date,
@@ -49,71 +45,39 @@ class NoticeModel {
       attachmentType: attachmentType,
       attachmentUrl: attachmentUrl,
       isImportant: isImportant,
+      isPinned: isPinned,
       isRead: isRead ?? this.isRead,
     );
   }
 
+  /// Parses a row of `parent_get_notices`.
   factory NoticeModel.fromMap(Map<String, dynamic> map) {
-    DateTime parseDate(dynamic val) {
-      if (val is String) {
-        return DateTime.tryParse(val) ?? DateTime.now();
-      } else if (val is DateTime) {
-        return val;
-      }
-      return DateTime.now();
-    }
-
-    final attUrl = map['attachment_url'] ?? map['file_url'];
+    String s(dynamic v) => (v == null || v.toString() == 'null') ? '' : v.toString().trim();
+    final attUrl = s(map['attachment_url']);
     String? attType;
-    if (attUrl != null && attUrl is String) {
-      if (attUrl.toLowerCase().contains('.pdf')) {
-        attType = 'pdf';
-      } else if (attUrl.toLowerCase().contains('.png') || attUrl.toLowerCase().contains('.jpg')) {
-        attType = 'image';
-      } else {
-        attType = 'doc';
-      }
+    if (attUrl.isNotEmpty) {
+      final lower = attUrl.toLowerCase();
+      attType = lower.contains('.pdf')
+          ? 'pdf'
+          : (lower.contains('.png') || lower.contains('.jpg') || lower.contains('.jpeg') ? 'image' : 'doc');
     }
-
-    final desc = (map['full_description'] ?? map['description'] ?? map['content'] ?? '').toString();
-    final shortDesc = (map['short_description'] ?? (desc.length > 100 ? '${desc.substring(0, 95)}...' : desc)).toString();
-
+    final content = s(map['content']);
+    final priority = s(map['priority']).toLowerCase();
+    final category = s(map['category']).isNotEmpty ? s(map['category']) : 'General';
+    final date = DateTime.tryParse(s(map['publish_date'])) ?? DateTime.tryParse(s(map['created_at']));
     return NoticeModel(
-      id: map['id'] ?? map['notice_id'] ?? 'NOTICE-${DateTime.now().millisecondsSinceEpoch}',
-      schoolId: map['school_id'] ?? '',
-      className: map['class_name'] ?? map['class'],
-      studentId: map['student_id'],
-      title: map['title'] ?? map['heading'] ?? 'School Notice',
-      category: map['category'] ?? (map['is_important'] == true ? 'Important' : 'Academic'),
-      date: parseDate(map['date'] ?? map['published_at'] ?? map['created_at']),
-      shortDescription: shortDesc,
-      fullDescription: desc,
-      publisherName: map['publisher_name'] ?? map['author'] ?? 'Principal Office',
-      attachmentName: map['attachment_name'] ?? (attUrl != null ? 'Notice_Document' : null),
-      attachmentType: map['attachment_type'] ?? attType,
-      attachmentUrl: attUrl,
-      isImportant: map['is_important'] ?? map['priority'] == 'high' || map['category'] == 'Important',
-      isRead: map['is_read'] ?? false,
+      id: s(map['id']),
+      title: s(map['title']).isNotEmpty ? s(map['title']) : 'Notice',
+      category: category,
+      date: (date ?? DateTime.fromMillisecondsSinceEpoch(0)).toLocal(),
+      shortDescription: content.length > 100 ? '${content.substring(0, 97)}...' : content,
+      fullDescription: content,
+      attachmentName: attUrl.isNotEmpty ? 'Attachment' : null,
+      attachmentType: attType,
+      attachmentUrl: attUrl.isNotEmpty ? attUrl : null,
+      isImportant: priority == 'high' || priority == 'urgent' || category.toLowerCase() == 'important',
+      isPinned: map['is_pinned'] == true || s(map['is_pinned']) == 'true',
+      isRead: map['is_read'] == true,
     );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'school_id': schoolId,
-      'class_name': className,
-      'student_id': studentId,
-      'title': title,
-      'category': category,
-      'date': date.toIso8601String().split('T').first,
-      'short_description': shortDescription,
-      'full_description': fullDescription,
-      'publisher_name': publisherName,
-      'attachment_name': attachmentName,
-      'attachment_type': attachmentType,
-      'attachment_url': attachmentUrl,
-      'is_important': isImportant,
-      'is_read': isRead,
-    };
   }
 }

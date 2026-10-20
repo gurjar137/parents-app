@@ -57,7 +57,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
     }
 
-    if (provider.isNotificationsLoading) {
+    if (!provider.hasNotificationsData && provider.notificationsError == null) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Notification Center • ${child.name}', style: AppTextStyles.headingSmall),
@@ -79,7 +79,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
     }
 
-    if (provider.notificationsError != null) {
+    if (provider.notificationsError != null && !provider.hasNotificationsData) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Notification Center • ${child.name}', style: AppTextStyles.headingSmall),
@@ -131,10 +131,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         title: Text('Notification Center • ${child.name}', style: AppTextStyles.headingSmall),
         elevation: 0,
         actions: [
+          if (provider.unreadNotificationsCount > 0)
+            IconButton(
+              icon: const Icon(Icons.done_all_rounded),
+              tooltip: 'Mark all as read',
+              onPressed: () async {
+                final ok = await provider.markAllNotificationsRead();
+                if (!context.mounted || ok) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Could not mark notifications as read. Please try again.')),
+                );
+              },
+            ),
           IconButton(
-            icon: const Icon(Icons.tune_rounded),
+            icon: const Icon(Icons.info_outline_rounded),
             onPressed: () => _showNotificationPreferencesModal(context),
-            tooltip: 'Notification Preferences',
+            tooltip: 'About notifications',
           ),
         ],
       ),
@@ -182,7 +194,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         child: EmptyStateWidget(
                           icon: Icons.notifications_none_rounded,
                           title: _selectedFilter == 'Unread' ? 'No new notifications' : 'No notifications yet',
-                          description: 'You are all caught up! Real-time alerts for ${child.name} will appear here.',
+                          description: 'Alerts about ${child.name} from the school will appear here.',
                         ),
                       ),
                     )
@@ -196,7 +208,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         padding: const EdgeInsets.only(bottom: 10),
                         child: AnimatedCard(
                           onTap: () {
-                            provider.markAppNotificationAsRead(item.id);
+                            if (!item.isRead) provider.markAppNotificationAsRead(item.id);
                             _navigateToDeepLink(context, item);
                           },
                           backgroundColor: item.isRead
@@ -227,8 +239,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text(item.title, style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
-                                          Text(DateFormatter.formatTime(item.timestamp), style: AppTextStyles.caption),
+                                          Expanded(
+                                            child: Text(item.title, style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            DateUtils.isSameDay(item.timestamp, DateTime.now())
+                                                ? DateFormatter.formatTime(item.timestamp)
+                                                : DateFormatter.formatDayMonth(item.timestamp),
+                                            style: AppTextStyles.caption,
+                                          ),
                                         ],
                                       ),
                                       const SizedBox(height: 4),
@@ -276,7 +296,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         targetScreen = const FeesScreen();
         break;
       default:
-        targetScreen = const NoticesScreen();
+        return; // general school message: nothing more to open
     }
 
     Navigator.push(
@@ -289,63 +309,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Notification Preferences', style: AppTextStyles.headingMedium),
-                  const SizedBox(height: 6),
-                  Text('Choose categories you want to receive mobile push notifications for:', style: AppTextStyles.bodyMedium),
-                  const SizedBox(height: 16),
-                  SwitchListTile(
-                    title: const Text('Homework Assignments'),
-                    value: true,
-                    activeColor: AppColors.brandIndigo,
-                    onChanged: (val) {},
-                  ),
-                  SwitchListTile(
-                    title: const Text('Attendance Updates'),
-                    value: true,
-                    activeColor: AppColors.brandIndigo,
-                    onChanged: (val) {},
-                  ),
-                  SwitchListTile(
-                    title: const Text('Exam Results & Marks'),
-                    value: true,
-                    activeColor: AppColors.brandIndigo,
-                    onChanged: (val) {},
-                  ),
-                  SwitchListTile(
-                    title: const Text('Fee Reminders & Receipts'),
-                    value: true,
-                    activeColor: AppColors.brandIndigo,
-                    onChanged: (val) {},
-                  ),
-                  SwitchListTile(
-                    title: const Text('Mandatory School Notices (Required)'),
-                    value: true,
-                    activeColor: AppColors.brandIndigo,
-                    onChanged: null, // mandatory school notices cannot be disabled
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Save Preferences'),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('About notifications', style: AppTextStyles.headingMedium),
+            const SizedBox(height: 12),
+            Text(
+              'The school sends in-app notifications when a fee payment is recorded, when your child is marked '
+              'absent (or an absence is corrected), when homework is set for the class, when exam results are '
+              'published, and when a notice is published for parents.',
+              style: AppTextStyles.bodyMedium,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'They appear here when the app is opened or refreshed. Phone push notifications and per-category '
+              'settings are not available yet.',
+              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

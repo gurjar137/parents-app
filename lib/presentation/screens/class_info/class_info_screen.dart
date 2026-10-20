@@ -44,7 +44,8 @@ class ClassInfoScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Class ${child.className}', style: AppTextStyles.headingSmall.copyWith(color: Colors.white, fontSize: 20)),
-                        Text('Class Teacher: ${child.classTeacher}', style: AppTextStyles.bodySmall.copyWith(color: Colors.white70)),
+                        if (child.classTeacher.isNotEmpty)
+                          Text('Class Teacher: ${child.classTeacher}', style: AppTextStyles.bodySmall.copyWith(color: Colors.white70)),
                       ],
                     ),
                   ),
@@ -63,9 +64,9 @@ class ClassInfoScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   StatRow(label: 'Grade Level:', value: child.grade),
                   StatRow(label: 'Section:', value: child.section),
-                  StatRow(label: 'Roll Number:', value: '${child.rollNo}'),
-                  StatRow(label: 'Class Strength:', value: '${child.classmateCount} Students'),
-                  StatRow(label: 'House Assignment:', value: child.houseName),
+                  if (child.rollNo > 0) StatRow(label: 'Roll Number:', value: '${child.rollNo}'),
+                  if (child.classmateCount > 0) StatRow(label: 'Class Strength:', value: '${child.classmateCount} Students'),
+                  if (child.houseName.isNotEmpty) StatRow(label: 'House Assignment:', value: child.houseName),
                 ],
               ),
             ),

@@ -17,7 +17,7 @@ class AttendanceScreen extends StatelessWidget {
     final child = provider.selectedChild;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (provider.isAttendanceLoading) {
+    if (!provider.hasAttendanceData && provider.attendanceError == null) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Attendance Record', style: AppTextStyles.headingSmall),
@@ -39,7 +39,7 @@ class AttendanceScreen extends StatelessWidget {
       );
     }
 
-    if (provider.attendanceError != null) {
+    if (provider.attendanceError != null && !provider.isAttendanceLoading) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Attendance Record', style: AppTextStyles.headingSmall),
@@ -83,7 +83,7 @@ class AttendanceScreen extends StatelessWidget {
 
     final summary = provider.currentAttendance;
     final today = provider.todayAttendance;
-    final isLowAttendance = summary.percentage < 85.0;
+    final isLowAttendance = summary.hasRecords && summary.percentage < 85.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -108,7 +108,12 @@ class AttendanceScreen extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 26,
-                        backgroundImage: NetworkImage(child.avatarUrl),
+                        backgroundColor: AppColors.brandIndigo,
+                        backgroundImage: child.avatarUrl.startsWith('http') ? NetworkImage(child.avatarUrl) : null,
+                        child: child.avatarUrl.startsWith('http')
+                            ? null
+                            : Text(child.name.isNotEmpty ? child.name[0].toUpperCase() : '?',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -123,7 +128,7 @@ class AttendanceScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'Class ${child.className} • Roll No. ${child.rollNo}',
+                              ['Class ${child.className}', if (child.rollNo > 0) 'Roll No. ${child.rollNo}'].join(' • '),
                               style: AppTextStyles.bodySmall.copyWith(color: Colors.white70),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -137,7 +142,7 @@ class AttendanceScreen extends StatelessWidget {
                         constraints: const BoxConstraints(minWidth: 64, minHeight: 38),
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: summary.percentage >= 85 ? AppColors.success : AppColors.warning,
+                          color: !summary.hasRecords ? AppColors.textMuted : (summary.percentage >= 85 ? AppColors.success : AppColors.warning),
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: const [
                             BoxShadow(
@@ -151,7 +156,9 @@ class AttendanceScreen extends StatelessWidget {
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(
-                              summary.percentage % 1 == 0
+                              !summary.hasRecords
+                                  ? '—'
+                                  : summary.percentage % 1 == 0
                                   ? '${summary.percentage.toInt()}%'
                                   : '${summary.percentage.toStringAsFixed(1)}%',
                               style: AppTextStyles.headingSmall.copyWith(
@@ -263,8 +270,10 @@ class AttendanceScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          isLowAttendance
-                              ? 'Attendance is below the recommended level (85%). Consistent attendance supports academic success.'
+                          !summary.hasRecords
+                              ? 'No attendance has been recorded for ${summary.monthYear} yet.'
+                              : isLowAttendance
+                              ? 'Attendance is below 85% this month. Consistent attendance supports academic success.'
                               : '${child.name.split(' ').first} has attended ${summary.percentage % 1 == 0 ? summary.percentage.toInt() : summary.percentage.toStringAsFixed(1)}% of school days this month.',
                           style: AppTextStyles.bodySmall.copyWith(color: AppColors.textPrimary),
                         ),

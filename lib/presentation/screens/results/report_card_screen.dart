@@ -37,7 +37,7 @@ class ReportCardScreen extends StatelessWidget {
             onPressed: () {
               PdfPreviewModal.show(
                 context: context,
-                title: 'Official Academic Report Card',
+                title: 'Marks summary (preview)',
                 documentName: 'ReportCard_${child.name}_${examResult.examName}.pdf',
                 contentWidget: _buildReportCardPaper(
                   studentName: child.name,
@@ -75,44 +75,11 @@ class ReportCardScreen extends StatelessWidget {
                 fatherName: child.displayFatherName,
               ),
             ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.share_rounded, size: 18),
-                    label: const Text('Share PDF'),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sharing Report Card PDF...')),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.print_rounded, size: 18),
-                    label: const Text('Print Report'),
-                    onPressed: () {
-                      PdfPreviewModal.show(
-                        context: context,
-                        title: 'Official Academic Report Card',
-                        documentName: 'ReportCard_${child.name}.pdf',
-                        contentWidget: _buildReportCardPaper(
-                          studentName: child.name,
-                          className: child.className,
-                          rollNo: child.rollNo,
-                          admissionNo: child.admissionNo,
-                          schoolName: provider.branding.schoolName,
-                          schoolAddress: provider.branding.address,
-                          fatherName: child.displayFatherName,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
+            const SizedBox(height: 16),
+            Text(
+              'This is a summary of the published marks. The official report card is issued by the school.',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -149,7 +116,7 @@ class ReportCardScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'STUDENT ACADEMIC PERFORMANCE REPORT CARD',
+                  'PUBLISHED MARKS SUMMARY',
                   style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold, color: AppColors.brandBlue),
                 ),
               ),
@@ -168,8 +135,8 @@ class ReportCardScreen extends StatelessWidget {
         if (fatherName.isNotEmpty && fatherName != 'Not provided')
           StatRow(label: "Father's Name:", value: fatherName),
         StatRow(label: 'Class & Section:', value: className),
-        StatRow(label: 'Roll Number:', value: '$rollNo'),
-        StatRow(label: 'Admission No:', value: admissionNo),
+        if (rollNo > 0) StatRow(label: 'Roll Number:', value: '$rollNo'),
+        if (admissionNo.isNotEmpty) StatRow(label: 'Admission No:', value: admissionNo),
         StatRow(label: 'Exam Name:', value: examResult.examName),
 
         const SizedBox(height: 16),
@@ -194,16 +161,16 @@ class ReportCardScreen extends StatelessWidget {
                 _buildTableCell('Subject', isHeader: true),
                 _buildTableCell('Max', isHeader: true),
                 _buildTableCell('Obtained', isHeader: true),
-                _buildTableCell('Grade', isHeader: true),
+                _buildTableCell('Pass', isHeader: true),
               ],
             ),
             ...examResult.subjects.map(
               (sub) => TableRow(
                 children: [
                   _buildTableCell(sub.subject),
-                  _buildTableCell('${sub.maxMarks.toInt()}'),
-                  _buildTableCell('${sub.obtainedMarks.toInt()}'),
-                  _buildTableCell(sub.grade),
+                  _buildTableCell(_fmt(sub.maxMarks)),
+                  _buildTableCell(sub.obtainedMarks == null ? (sub.status.isNotEmpty ? sub.status : '—') : _fmt(sub.obtainedMarks!)),
+                  _buildTableCell(sub.passingMarks == null ? '—' : _fmt(sub.passingMarks!)),
                 ],
               ),
             ),
@@ -222,55 +189,24 @@ class ReportCardScreen extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              StatRow(label: 'Total Marks:', value: '${examResult.totalObtained.toInt()} / ${examResult.totalMax.toInt()}'),
-              StatRow(label: 'Overall %:', value: '${examResult.overallPercentage.toStringAsFixed(1)}%'),
-              StatRow(label: 'Grade:', value: examResult.overallGrade),
+              Flexible(child: StatRow(label: 'Total:', value: '${_fmt(examResult.totalObtained)} / ${_fmt(examResult.totalMax)}')),
+              Flexible(child: StatRow(label: 'Overall:', value: '${examResult.overallPercentage.toStringAsFixed(1)}%')),
             ],
           ),
         ),
 
         const SizedBox(height: 20),
 
-        // Teacher Remarks
-        Text('Class Teacher Remarks', style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
-        const SizedBox(height: 6),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Text(
-            '"${examResult.teacherRemarks}"',
-            style: AppTextStyles.bodyMedium.copyWith(fontStyle: FontStyle.italic),
-          ),
-        ),
-
-        const SizedBox(height: 30),
-
-        // Seals & Signatures
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              children: [
-                Text('________________', style: AppTextStyles.caption),
-                Text('Class Teacher', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
-              ],
-            ),
-            Column(
-              children: [
-                Text('________________', style: AppTextStyles.caption),
-                Text('Principal Seal', style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ],
-        ),
+        // Subject remarks recorded by teachers (if any)
+        ...examResult.subjects.where((sub) => sub.teacherComment != null).map((sub) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('${sub.subject}: ${sub.teacherComment}', style: AppTextStyles.bodySmall),
+            )),
       ],
     );
   }
+
+  static String _fmt(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
 
   Widget _buildTableCell(String text, {bool isHeader = false}) {
     return Padding(

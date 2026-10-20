@@ -1,471 +1,124 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthResponse;
-import '../data/models/parent_model.dart';
-import '../data/models/student_model.dart';
-import '../data/models/attendance_model.dart';
-import '../data/models/homework_model.dart';
-import '../data/models/fee_model.dart';
-import '../data/models/result_model.dart';
-import '../data/models/timetable_model.dart';
-import '../data/models/notice_model.dart';
-import '../data/models/notification_model.dart';
-import '../data/models/exam_model.dart';
-import '../data/models/ptm_model.dart';
-import '../data/models/document_model.dart';
-import '../data/models/correction_request_model.dart';
-import '../data/models/message_model.dart';
-import '../data/models/transport_model.dart';
-import '../data/models/calendar_event_model.dart';
-import '../data/models/ai_message_model.dart';
-import '../data/models/school_brand_model.dart';
-import '../data/mock/mock_data.dart';
-import '../core/services/auth_service.dart';
+
 import '../core/services/attendance_service.dart';
-import '../core/services/homework_service.dart';
-import '../core/services/timetable_service.dart';
-import '../core/services/result_service.dart';
+import '../core/services/auth_service.dart';
 import '../core/services/fee_service.dart';
+import '../core/services/homework_service.dart';
+import '../core/services/link_child_service.dart';
 import '../core/services/notice_service.dart';
 import '../core/services/notification_service.dart';
-import '../core/services/link_child_service.dart';
+import '../core/services/parent_api.dart';
+import '../core/services/result_service.dart';
 import '../core/services/school_service.dart';
 import '../core/services/supabase_service.dart';
+import '../core/services/timetable_service.dart';
 import '../core/utils/currency_formatter.dart';
 import '../core/utils/date_formatter.dart';
+import '../data/models/ai_message_model.dart';
+import '../data/models/attendance_model.dart';
+import '../data/models/calendar_event_model.dart';
+import '../data/models/correction_request_model.dart';
+import '../data/models/document_model.dart';
+import '../data/models/exam_model.dart';
+import '../data/models/fee_model.dart';
+import '../data/models/homework_model.dart';
+import '../data/models/message_model.dart';
+import '../data/models/notice_model.dart';
+import '../data/models/notification_model.dart';
+import '../data/models/parent_model.dart';
+import '../data/models/ptm_model.dart';
+import '../data/models/result_model.dart';
+import '../data/models/school_brand_model.dart';
+import '../data/models/student_model.dart';
+import '../data/models/timetable_model.dart';
+import '../data/models/transport_model.dart';
 
+/// App state of the Parents App.
+///
+/// * Who is signed in and which children they may see comes ONLY from the
+///   server (`parent_get_session`), never from device storage.
+/// * Every per-child load carries a token; a response that arrives after the
+///   parent switched child (or signed out) is discarded.
+/// * A failed load sets an error message and keeps "no data" distinct from
+///   "empty": the lists stay null until a load succeeds.
 class ParentAppProvider extends ChangeNotifier {
-  late ParentModel _parent;
-  late List<StudentModel> _children;
-  StudentModel? _selectedChild;
-  late SchoolBrandModel _branding;
-  int _currentChildLoadToken = 0;
+  ParentAppProvider({bool autoStart = true}) {
+    if (autoStart) {
+      _setupAuthListener();
+      checkExistingSession();
+    } else {
+      _isSessionChecking = false;
+    }
+  }
 
-  // Authentication & Session State
+  ParentModel _parent = _emptyParent;
+  List<StudentModel> _children = [];
+  StudentModel? _selectedChild;
+  SchoolBrandModel _branding = SchoolBrandModel.defaultNeutral();
+  int _loadToken = 0;
+  StreamSubscription<AuthState>? _authSub;
+
   bool _isLoggedIn = false;
   bool _isAuthLoading = false;
   bool _isSessionChecking = true;
   bool _isDashboardLoading = false;
-  bool _isAttendanceLoading = false;
   String? _authError;
   String? _dashboardError;
-  String? _attendanceError;
+  String? _accountNotice;
 
-  // Attendance State
+  // Per-feature state. null list = not loaded (or failed), [] = loaded, empty.
+  bool _isAttendanceLoading = false;
+  String? _attendanceError;
   DailyAttendance? _todayAttendance;
   MonthlyAttendanceSummary? _activeAttendanceSummary;
   int _attendanceYear = DateTime.now().year;
   int _attendanceMonth = DateTime.now().month;
 
-  // Homework State
   bool _isHomeworkLoading = false;
   String? _homeworkError;
   List<HomeworkModel>? _activeHomeworkList;
 
-  // Timetable State
   bool _isTimetableLoading = false;
   String? _timetableError;
   List<TimetableEntryModel>? _activeTimetableList;
 
-  // Results State
   bool _isResultsLoading = false;
   String? _resultsError;
   List<ExamResultModel>? _activeResultsList;
 
-  // Fees State
+  bool _isExamsLoading = false;
+  String? _examsError;
+  List<ExamModel>? _activeExamsList;
+
   bool _isFeesLoading = false;
   String? _feesError;
   FeeSummaryModel? _activeFeeSummary;
 
-  // Notices State
   bool _isNoticesLoading = false;
   String? _noticesError;
   List<NoticeModel>? _activeNoticesList;
 
-  // Notifications State
   bool _isNotificationsLoading = false;
   String? _notificationsError;
   List<AppNotificationModel>? _activeNotificationsList;
 
-  // Local mutable datasets
-  late List<AppNotificationModel> _notifications;
-  late List<CorrectionRequestModel> _correctionRequests;
-  late List<AiMessageModel> _aiMessages;
-
+  List<AiMessageModel> _aiMessages = [];
   ThemeMode _themeMode = ThemeMode.light;
   int _selectedBottomNavIndex = 0;
-  String _lastUpdatedTime = 'Today, 10:42 AM';
+  DateTime? _lastSyncedAt;
   bool _isRefreshing = false;
 
-  ParentAppProvider() {
-    _init();
-    _setupAuthListener();
-    checkExistingSession();
-  }
-
-  void _init() {
-    _branding = SchoolBrandModel.defaultNeutral();
-    _parent = const ParentModel(
-      id: '',
-      name: '',
-      email: '',
-      phone: '',
-      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=300&h=300',
-      childrenIds: [],
-    );
-    _children = [];
-    _selectedChild = null;
-
-    _notifications = [];
-    _correctionRequests = [];
-    _aiMessages = [];
-  }
-
-  void _setupAuthListener() {
-    if (SupabaseService.isInitialized) {
-      SupabaseService.client.auth.onAuthStateChange.listen((data) async {
-        final AuthChangeEvent event = data.event;
-        final Session? session = data.session;
-
-        if (event == AuthChangeEvent.signedIn && session != null) {
-          final user = session.user;
-          final profile = await AuthService.fetchOrCreateParentProfile(user);
-          _parent = profile;
-          _isLoggedIn = true;
-          notifyListeners();
-        } else if (event == AuthChangeEvent.signedOut) {
-          _isLoggedIn = false;
-          _selectedBottomNavIndex = 0;
-          notifyListeners();
-        }
-      });
-    }
-  }
-
-  // Auth, Dashboard, Attendance, Homework, Timetable, Results, Fees, Notices & Notifications Getters
-  bool get isLoggedIn => _isLoggedIn;
-  bool get isAuthLoading => _isAuthLoading;
-  bool get isSessionChecking => _isSessionChecking;
-  bool get isDashboardLoading => _isDashboardLoading;
-  bool get isAttendanceLoading => _isAttendanceLoading;
-  bool get isHomeworkLoading => _isHomeworkLoading;
-  bool get isTimetableLoading => _isTimetableLoading;
-  bool get isResultsLoading => _isResultsLoading;
-  bool get isFeesLoading => _isFeesLoading;
-  bool get isNoticesLoading => _isNoticesLoading;
-  bool get isNotificationsLoading => _isNotificationsLoading;
-  String? get authError => _authError;
-  String? get dashboardError => _dashboardError;
-  String? get attendanceError => _attendanceError;
-  String? get homeworkError => _homeworkError;
-  String? get timetableError => _timetableError;
-  String? get resultsError => _resultsError;
-  String? get feesError => _feesError;
-  String? get noticesError => _noticesError;
-  String? get notificationsError => _notificationsError;
-  int get unreadNotificationsCount => notifications.where((n) => !n.isRead).length;
-  DailyAttendance? get todayAttendance => _todayAttendance;
-  int get attendanceYear => _attendanceYear;
-  int get attendanceMonth => _attendanceMonth;
-
-  Future<void> _loadSchoolBrandingForChild(StudentModel child) async {
-    final token = _currentChildLoadToken;
-    final targetSchoolId = child.schoolId;
-    if (targetSchoolId.isNotEmpty) {
-      final brand = await SchoolService.fetchSchoolBrand(targetSchoolId);
-      if (_currentChildLoadToken == token && _selectedChild?.schoolId == targetSchoolId) {
-        _branding = brand;
-        notifyListeners();
-      }
-    } else {
-      _branding = SchoolBrandModel.defaultNeutral();
-      notifyListeners();
-    }
-  }
-
-  Future<void> loadNotificationsForSelectedChild() async {
-    if (_selectedChild == null) {
-      _isNotificationsLoading = false;
-      notifyListeners();
-      return;
-    }
-    final token = _currentChildLoadToken;
-    final studentId = _selectedChild!.id;
-
-    _isNotificationsLoading = true;
-    _notificationsError = null;
-    notifyListeners();
-
-    try {
-      await NotificationService.registerDeviceToken(
-        parentAuthId: _parent.id,
-        schoolId: _selectedChild!.schoolId,
-      );
-      final list = await NotificationService.fetchNotificationsForParent(
-        parentAuthId: _parent.id,
-        schoolId: _selectedChild!.schoolId,
-        studentId: _selectedChild!.id,
-      );
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _activeNotificationsList = list;
-      _notificationsError = null;
-    } catch (e) {
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _notificationsError = 'Unable to load notifications. Please try again.';
-    }
-
-    _isNotificationsLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> markAppNotificationAsRead(String notificationId) async {
-    _activeNotificationsList ??= [];
-    final index = _activeNotificationsList!.indexWhere((n) => n.id == notificationId);
-    if (index != -1 && !_activeNotificationsList![index].isRead) {
-      _activeNotificationsList![index] = _activeNotificationsList![index].copyWith(isRead: true);
-      notifyListeners();
-    }
-    await NotificationService.markNotificationAsRead(
-      notificationId: notificationId,
-      parentAuthId: _parent.id,
-    );
-  }
-
-  Future<void> loadNoticesForSelectedChild() async {
-    if (_selectedChild == null) {
-      _isNoticesLoading = false;
-      notifyListeners();
-      return;
-    }
-    final token = _currentChildLoadToken;
-    final studentId = _selectedChild!.id;
-
-    _isNoticesLoading = true;
-    _noticesError = null;
-    notifyListeners();
-
-    try {
-      final list = await NoticeService.fetchNoticesForParent(
-        schoolId: _selectedChild!.schoolId,
-        className: _selectedChild!.className,
-        studentId: _selectedChild!.id,
-      );
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _activeNoticesList = list;
-      _noticesError = null;
-    } catch (e) {
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _noticesError = 'Unable to load notices. Please try again.';
-    }
-
-    _isNoticesLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> markNoticeAsRead(String noticeId) async {
-    _activeNoticesList ??= [];
-    final index = _activeNoticesList!.indexWhere((n) => n.id == noticeId);
-    if (index != -1 && !_activeNoticesList![index].isRead) {
-      _activeNoticesList![index] = _activeNoticesList![index].copyWith(isRead: true);
-      notifyListeners();
-    }
-    await NoticeService.markNoticeAsRead(noticeId: noticeId, parentAuthId: _parent.id);
-  }
-
-  Future<void> loadFeeSummaryForSelectedChild() async {
-    if (_selectedChild == null) {
-      _isFeesLoading = false;
-      notifyListeners();
-      return;
-    }
-    final token = _currentChildLoadToken;
-    final studentId = _selectedChild!.id;
-
-    _isFeesLoading = true;
-    _feesError = null;
-    notifyListeners();
-
-    try {
-      final parentCode = (_selectedChild!.linkingCode != null && _selectedChild!.linkingCode!.isNotEmpty)
-          ? _selectedChild!.linkingCode!
-          : (await AuthService.getSavedParentCode() ?? '');
-
-      final summary = await FeeService.fetchFeeSummaryForStudent(
-        studentId: _selectedChild!.id,
-        schoolId: _selectedChild!.schoolId,
-        academicYearId: _selectedChild!.academicYear,
-        parentAccessCode: parentCode,
-      );
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _activeFeeSummary = summary;
-      _feesError = null;
-    } catch (e) {
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _feesError = 'Unable to load fee details. Please try again.';
-    }
-
-    _isFeesLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> loadResultsForSelectedChild() async {
-    if (_selectedChild == null) {
-      _isResultsLoading = false;
-      notifyListeners();
-      return;
-    }
-    final token = _currentChildLoadToken;
-    final studentId = _selectedChild!.id;
-
-    _isResultsLoading = true;
-    _resultsError = null;
-    notifyListeners();
-
-    try {
-      final list = await ResultService.fetchResultsForStudent(
-        studentId: _selectedChild!.id,
-        schoolId: _selectedChild!.schoolId,
-      );
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _activeResultsList = list;
-      _resultsError = null;
-    } catch (e) {
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _resultsError = 'Unable to load examination results. Please try again.';
-    }
-
-    _isResultsLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> loadTimetableForSelectedChild() async {
-    if (_selectedChild == null) {
-      _isTimetableLoading = false;
-      notifyListeners();
-      return;
-    }
-    final token = _currentChildLoadToken;
-    final studentId = _selectedChild!.id;
-
-    _isTimetableLoading = true;
-    _timetableError = null;
-    notifyListeners();
-
-    try {
-      final list = await TimetableService.fetchTimetableForStudent(
-        schoolId: _selectedChild!.schoolId,
-        className: _selectedChild!.className,
-        section: _selectedChild!.section,
-        studentId: _selectedChild!.id,
-      );
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _activeTimetableList = list;
-      _timetableError = null;
-    } catch (e) {
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _timetableError = 'Unable to load timetable. Please try again.';
-    }
-
-    _isTimetableLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> loadHomeworkForSelectedChild() async {
-    if (_selectedChild == null) {
-      _isHomeworkLoading = false;
-      notifyListeners();
-      return;
-    }
-    final token = _currentChildLoadToken;
-    final studentId = _selectedChild!.id;
-
-    _isHomeworkLoading = true;
-    _homeworkError = null;
-    notifyListeners();
-
-    try {
-      final list = await HomeworkService.fetchHomeworkForStudent(
-        studentId: _selectedChild!.id,
-        className: _selectedChild!.className,
-        schoolId: _selectedChild!.schoolId,
-      );
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _activeHomeworkList = list;
-      _homeworkError = null;
-    } catch (e) {
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _homeworkError = 'Unable to load homework. Please try again.';
-    }
-
-    _isHomeworkLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> loadAttendanceForSelectedChild() async {
-    if (_selectedChild == null) {
-      _isAttendanceLoading = false;
-      notifyListeners();
-      return;
-    }
-    final token = _currentChildLoadToken;
-    final studentId = _selectedChild!.id;
-
-    _isAttendanceLoading = true;
-    _attendanceError = null;
-    notifyListeners();
-
-    try {
-      final summary = await AttendanceService.fetchAttendanceForStudent(
-        studentId: studentId,
-        year: _attendanceYear,
-        month: _attendanceMonth,
-      );
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _activeAttendanceSummary = summary;
-
-      final today = await AttendanceService.fetchTodayAttendance(studentId: studentId);
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _todayAttendance = today;
-      _attendanceError = null;
-    } catch (e) {
-      if (_currentChildLoadToken != token || _selectedChild?.id != studentId) return;
-      _attendanceError = 'Unable to load attendance. Please try again.';
-    }
-
-    _isAttendanceLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> changeAttendanceMonth(int year, int month) async {
-    _attendanceYear = year;
-    _attendanceMonth = month;
-    await loadAttendanceForSelectedChild();
-  }
-
-  Future<void> retryDashboardLoad() async {
-    _isDashboardLoading = true;
-    _dashboardError = null;
-    notifyListeners();
-
-    await Future.delayed(const Duration(milliseconds: 400));
-
-    try {
-      final user = AuthService.currentUser;
-      if (user != null) {
-        final profile = await AuthService.fetchOrCreateParentProfile(user);
-        _parent = profile;
-        _children = await LinkChildService.fetchLinkedStudentsForParent(user.id);
-        if (_children.isNotEmpty) {
-          _selectedChild = _children.first;
-        }
-      }
-      _dashboardError = null;
-    } catch (e) {
-      _dashboardError = 'Unable to load your child\'s information. Please try again.';
-    }
-
-    _isDashboardLoading = false;
-    notifyListeners();
-  }
+  static const ParentModel _emptyParent = ParentModel(
+    id: '',
+    name: '',
+    email: '',
+    phone: '',
+    avatarUrl: '',
+    childrenIds: [],
+  );
 
   static const StudentModel _emptyStudent = StudentModel(
     id: '',
@@ -476,191 +129,243 @@ class ParentAppProvider extends ChangeNotifier {
     rollNo: 0,
     admissionNo: '',
     schoolId: '',
-    fatherName: null,
-    academicYear: '2026-2027',
+    academicYear: '',
     avatarUrl: '',
     classTeacher: '',
     classmateCount: 0,
     houseName: '',
   );
 
-  // Data Getters
+  // ------------------------------------------------------------------
+  // Getters
+  // ------------------------------------------------------------------
+  bool get isLoggedIn => _isLoggedIn;
+  bool get isAuthLoading => _isAuthLoading;
+  bool get isSessionChecking => _isSessionChecking;
+  bool get isDashboardLoading => _isDashboardLoading;
+  bool get isAttendanceLoading => _isAttendanceLoading;
+  bool get isHomeworkLoading => _isHomeworkLoading;
+  bool get isTimetableLoading => _isTimetableLoading;
+  bool get isResultsLoading => _isResultsLoading;
+  bool get isExamsLoading => _isExamsLoading;
+  bool get isFeesLoading => _isFeesLoading;
+  bool get isNoticesLoading => _isNoticesLoading;
+  bool get isNotificationsLoading => _isNotificationsLoading;
+  String? get authError => _authError;
+  String? get dashboardError => _dashboardError;
+
+  /// Set when the signed-in account cannot use the Parents App (staff login,
+  /// inactive account). Shown on the link screen.
+  String? get accountNotice => _accountNotice;
+  String? get attendanceError => _attendanceError;
+  String? get homeworkError => _homeworkError;
+  String? get timetableError => _timetableError;
+  String? get resultsError => _resultsError;
+  String? get examsError => _examsError;
+  String? get feesError => _feesError;
+  String? get noticesError => _noticesError;
+  String? get notificationsError => _notificationsError;
+
   ParentModel get parent => _parent;
-  List<StudentModel> get children => _children;
+  List<StudentModel> get children => List.unmodifiable(_children);
   StudentModel get selectedChild => _selectedChild ?? _emptyStudent;
   bool get isChildLinked => _selectedChild != null && _selectedChild!.id.isNotEmpty;
-
-  /// Dynamic Father/Parent Name derived from currently connected/selected student record
-  String get currentFatherName {
-    if (_selectedChild != null &&
-        _selectedChild!.fatherName != null &&
-        _selectedChild!.fatherName!.trim().isNotEmpty &&
-        _selectedChild!.fatherName!.trim().toLowerCase() != 'null') {
-      return _selectedChild!.fatherName!.trim();
-    }
-    if (_parent.relationship.toLowerCase().contains('father') &&
-        _parent.name.trim().isNotEmpty &&
-        _parent.name != 'Parent User' &&
-        _parent.name != 'Parent' &&
-        _parent.name != 'Dharampal Sharma' &&
-        _parent.name != 'Rajesh Sharma') {
-      return _parent.name.trim();
-    }
-    return '';
-  }
-
   SchoolBrandModel get branding => _branding;
   ThemeMode get themeMode => _themeMode;
   int get selectedBottomNavIndex => _selectedBottomNavIndex;
-  String get lastUpdatedTime => _lastUpdatedTime;
   bool get isRefreshing => _isRefreshing;
-  List<CorrectionRequestModel> get correctionRequests => _correctionRequests;
+  DateTime? get lastSyncedAt => _lastSyncedAt;
+  String get lastUpdatedTime =>
+      _lastSyncedAt == null ? 'Not synced yet' : 'Updated ${DateFormatter.formatTime(_lastSyncedAt!)}';
+
+  DailyAttendance? get todayAttendance => _todayAttendance;
+  int get attendanceYear => _attendanceYear;
+  int get attendanceMonth => _attendanceMonth;
+
+  int get unreadNotificationsCount => notifications.where((n) => !n.isRead).length;
+
+  /// Parent's own name (no name is guessed from the student record).
+  String get currentFatherName => _parent.name.trim();
+
+  MonthlyAttendanceSummary get currentAttendance =>
+      _activeAttendanceSummary ??
+      MonthlyAttendanceSummary.fromDailyRecords(
+        monthYear: DateFormatter.formatMonthYear(DateTime(_attendanceYear, _attendanceMonth)),
+        records: const [],
+      );
+
+  FeeSummaryModel get currentFeeSummary => _activeFeeSummary ?? FeeSummaryModel.empty(_selectedChild?.id ?? '');
+  bool get hasFeeData => _activeFeeSummary != null;
+  bool get hasAttendanceData => _activeAttendanceSummary != null;
+  bool get hasHomeworkData => _activeHomeworkList != null;
+  bool get hasTimetableData => _activeTimetableList != null;
+  bool get hasResultsData => _activeResultsList != null;
+  bool get hasExamsData => _activeExamsList != null;
+  bool get hasNoticesData => _activeNoticesList != null;
+  bool get hasNotificationsData => _activeNotificationsList != null;
+
+  List<HomeworkModel> get currentHomeworkList => _activeHomeworkList ?? const [];
+  List<ExamModel> get currentExamsList => _activeExamsList ?? const [];
+  List<ExamResultModel> get currentResultsList => _activeResultsList ?? const [];
+  List<NoticeModel> get notices => _activeNoticesList ?? const [];
+  List<AppNotificationModel> get notifications => _activeNotificationsList ?? const [];
+
+  Map<String, List<TimetableEntryModel>> get currentTimetable {
+    final list = _activeTimetableList;
+    if (list == null || list.isEmpty) return {};
+    final map = <String, List<TimetableEntryModel>>{};
+    for (final entry in list) {
+      map.putIfAbsent(entry.dayOfWeek, () => []).add(entry);
+    }
+    return map;
+  }
+
+  /// Next class today (or the first class of the next school day).
+  TimetableEntryModel? get nextClassEntry {
+    final timetable = currentTimetable;
+    if (timetable.isEmpty) return null;
+    final now = DateTime.now();
+    for (var offset = 0; offset < 7; offset++) {
+      final day = TimetableEntryModel.weekdays[(now.weekday - 1 + offset) % 7];
+      final classes = (timetable[day] ?? const <TimetableEntryModel>[]).where((e) => !e.isBreak).toList();
+      if (classes.isEmpty) continue;
+      if (offset > 0) return classes.first;
+      final nowMinutes = now.hour * 60 + now.minute;
+      for (final c in classes) {
+        final m = _minutesOf(c.startTime);
+        if (m == null || m >= nowMinutes) return c;
+      }
+    }
+    return null;
+  }
+
+  static int? _minutesOf(String time) {
+    final m = RegExp(r'^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp][Mm])?').firstMatch(time.trim());
+    if (m == null) return null;
+    var h = int.parse(m.group(1)!);
+    final min = int.parse(m.group(2)!);
+    final ampm = m.group(3)?.toLowerCase();
+    if (ampm == 'pm' && h < 12) h += 12;
+    if (ampm == 'am' && h == 12) h = 0;
+    return h * 60 + min;
+  }
+
+  // Features without a School OS data source. They return nothing and the
+  // screens say the feature is not available (no demo data).
+  PtmModel? get currentPtmSchedule => null;
+  List<DocumentModel> get currentDocuments => const [];
+  List<CalendarEventModel> get calendarEvents => const [];
+  TransportModel? get currentTransport => null;
+  List<MessageThread> get currentMessagesList => const [];
+  int get unreadMessagesCount => 0;
+  List<CorrectionRequestModel> get correctionRequests => const [];
   List<AiMessageModel> get aiMessages => _aiMessages;
 
-  // Check persistent session on app startup
+  // ------------------------------------------------------------------
+  // Session
+  // ------------------------------------------------------------------
+  void _setupAuthListener() {
+    if (!SupabaseService.isInitialized) return;
+    _authSub = SupabaseService.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedOut && _isLoggedIn) {
+        _resetState();
+        notifyListeners();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> checkExistingSession() async {
     _isSessionChecking = true;
     notifyListeners();
-
     try {
-      final savedCode = await AuthService.getSavedParentCode();
-      if (savedCode != null && savedCode.isNotEmpty) {
-        final authRes = await AuthService.signInWithParentCode(savedCode);
-        if (authRes.status == AuthStatus.success && authRes.parent != null) {
-          _parent = authRes.parent!;
-          if (authRes.children != null && authRes.children!.isNotEmpty) {
-            _children = List.from(authRes.children!);
-            _selectedChild = _children.first;
-            _loadSchoolBrandingForChild(_selectedChild!);
-            loadAttendanceForSelectedChild();
-            loadHomeworkForSelectedChild();
-            loadTimetableForSelectedChild();
-            loadFeeSummaryForSelectedChild();
-            loadResultsForSelectedChild();
-            loadNoticesForSelectedChild();
-            loadNotificationsForSelectedChild();
-          } else {
-            _children = [];
-            _selectedChild = null;
-          }
-          _isLoggedIn = true;
-          _isSessionChecking = false;
-          notifyListeners();
-          return;
-        }
-      }
-
-      final user = AuthService.currentUser;
-      final session = AuthService.currentSession;
-
-      if (user != null && session != null) {
-        final profile = await AuthService.fetchOrCreateParentProfile(user);
-        if (profile.status.toLowerCase() == 'active') {
-          _parent = profile;
-          _children = await LinkChildService.fetchLinkedStudentsForParent(user.id);
-          if (_children.isNotEmpty) {
-            _selectedChild = _children.first;
-            _loadSchoolBrandingForChild(_selectedChild!);
-            loadAttendanceForSelectedChild();
-            loadHomeworkForSelectedChild();
-            loadTimetableForSelectedChild();
-            loadFeeSummaryForSelectedChild();
-            loadResultsForSelectedChild();
-            loadNoticesForSelectedChild();
-            loadNotificationsForSelectedChild();
-          } else {
-            _selectedChild = null;
-          }
-          _isLoggedIn = true;
-        } else {
-          await AuthService.clearSession();
-          _isLoggedIn = false;
-          _children = [];
-          _selectedChild = null;
-        }
+      if (AuthService.currentSession != null) {
+        await _loadSessionAndChildren();
       } else {
-        _isLoggedIn = false;
-        _children = [];
-        _selectedChild = null;
+        _resetState();
       }
-    } catch (_) {
-      _isLoggedIn = false;
-      _children = [];
-      _selectedChild = null;
+    } catch (e) {
+      // Signed in but the server could not be reached: stay signed in and let
+      // the dashboard show the error with Retry (no cached child data).
+      _isLoggedIn = AuthService.currentSession != null;
+      _dashboardError = parentErrorMessage(e);
     }
-
     _isSessionChecking = false;
     notifyListeners();
   }
 
-  // Secure Student Linking Method
-  Future<LinkChildResponse> linkChildWithCode({
-    required String codeOrStudentId,
-    String relationship = 'Parent',
-  }) async {
-    final cleanCode = codeOrStudentId.trim().toUpperCase();
-    if (cleanCode.isEmpty) {
-      return const LinkChildResponse(
-        status: LinkStatus.invalidCode,
-        errorMessage: 'Please enter a valid Parent Access Code.',
-      );
+  /// Loads the parent and linked children from the server and reloads the
+  /// selected child's data. Keeps the current child selected if still linked.
+  Future<void> _loadSessionAndChildren() async {
+    final session = await AuthService.loadSession();
+    _parent = session.parent;
+    _isLoggedIn = true;
+    _dashboardError = null;
+    _accountNotice = session.isStaffAccount
+        ? 'This is a school staff account. The Parents App needs a parent account.'
+        : (session.isInactive ? 'Your parent account is inactive. Please contact the school office.' : null);
+
+    final previousId = _selectedChild?.id;
+    _children = List.of(session.children);
+    if (_children.isEmpty) {
+      _selectChildInternal(null);
+      return;
     }
-
-    final response = await LinkChildService.linkStudentToParent(
-      codeOrStudentId: cleanCode,
-      relationship: relationship,
-    );
-
-    if (response.status == LinkStatus.success && response.student != null) {
-      final newStudent = response.student!;
-      if (_children.any((s) => s.id == newStudent.id)) {
-        return LinkChildResponse(
-          status: LinkStatus.alreadyLinked,
-          student: newStudent,
-          errorMessage: 'This child is already linked.',
-        );
-      }
-      _children.add(newStudent);
-      selectChild(newStudent);
-    }
-
-    return response;
+    final keep = _children.where((c) => c.id == previousId).toList();
+    _selectChildInternal(keep.isNotEmpty ? keep.first : _children.first, force: keep.isEmpty || previousId == null);
   }
 
-  // Connect Admin-Generated Unique Parent Code to Parent App Login
-  Future<AuthResponse> loginWithParentCode(String parentCode) async {
+  void _resetState() {
+    _loadToken++;
+    _isLoggedIn = false;
+    _parent = _emptyParent;
+    _children = [];
+    _selectedChild = null;
+    _branding = SchoolBrandModel.defaultNeutral();
+    _selectedBottomNavIndex = 0;
+    _accountNotice = null;
+    _dashboardError = null;
+    _lastSyncedAt = null;
+    _aiMessages = [];
+    _clearChildData();
+    SchoolService.clearCache();
+  }
+
+  void _clearChildData() {
+    _todayAttendance = null;
+    _activeAttendanceSummary = null;
+    _activeHomeworkList = null;
+    _activeTimetableList = null;
+    _activeResultsList = null;
+    _activeExamsList = null;
+    _activeFeeSummary = null;
+    _activeNoticesList = null;
+    _activeNotificationsList = null;
+    _attendanceError = _homeworkError = _timetableError = _resultsError = _examsError = null;
+    _feesError = _noticesError = _notificationsError = null;
+    _attendanceYear = DateTime.now().year;
+    _attendanceMonth = DateTime.now().month;
+  }
+
+  Future<AuthResponse> loginWithEmail({required String email, required String password}) async {
     _isAuthLoading = true;
     _authError = null;
     notifyListeners();
 
-    final response = await AuthService.signInWithParentCode(parentCode);
-
-    if (response.status == AuthStatus.success && response.parent != null) {
-      _parent = response.parent!;
-      if (response.children != null && response.children!.isNotEmpty) {
-        _children = List.from(response.children!);
-        _selectedChild = _children.first;
-        _currentChildLoadToken++;
-
-        _loadSchoolBrandingForChild(_selectedChild!);
-        loadAttendanceForSelectedChild();
-        loadHomeworkForSelectedChild();
-        loadTimetableForSelectedChild();
-        loadFeeSummaryForSelectedChild();
-        loadResultsForSelectedChild();
-        loadNoticesForSelectedChild();
-        loadNotificationsForSelectedChild();
-      } else {
-        _children = [];
-        _selectedChild = null;
-        _branding = SchoolBrandModel.defaultNeutral();
+    final response = await AuthService.signInWithEmailPassword(email: email, password: password);
+    if (response.status == AuthStatus.success) {
+      try {
+        await _loadSessionAndChildren();
+      } catch (e) {
+        _isLoggedIn = true;
+        _dashboardError = parentErrorMessage(e);
       }
-      _isLoggedIn = true;
-      _authError = null;
     } else {
-      _children = [];
-      _selectedChild = null;
-      _branding = SchoolBrandModel.defaultNeutral();
       _authError = response.errorMessage;
     }
 
@@ -669,55 +374,6 @@ class ParentAppProvider extends ChangeNotifier {
     return response;
   }
 
-  // Real Supabase Auth: Sign In with Email & Password
-  Future<AuthResponse> loginWithEmail({
-    required String email,
-    required String password,
-  }) async {
-    _isAuthLoading = true;
-    _authError = null;
-    notifyListeners();
-
-    final response = await AuthService.signInWithEmailPassword(
-      email: email,
-      password: password,
-    );
-
-    if (response.status == AuthStatus.success && response.parent != null) {
-      _parent = response.parent!;
-      if (response.children != null && response.children!.isNotEmpty) {
-        _children = List.from(response.children!);
-        _selectedChild = _children.first;
-        _currentChildLoadToken++;
-
-        _loadSchoolBrandingForChild(_selectedChild!);
-        loadAttendanceForSelectedChild();
-        loadHomeworkForSelectedChild();
-        loadTimetableForSelectedChild();
-        loadFeeSummaryForSelectedChild();
-        loadResultsForSelectedChild();
-        loadNoticesForSelectedChild();
-        loadNotificationsForSelectedChild();
-      } else {
-        _children = [];
-        _selectedChild = null;
-        _branding = SchoolBrandModel.defaultNeutral();
-      }
-      _isLoggedIn = true;
-      _authError = null;
-    } else {
-      _children = [];
-      _selectedChild = null;
-      _branding = SchoolBrandModel.defaultNeutral();
-      _authError = response.errorMessage;
-    }
-
-    _isAuthLoading = false;
-    notifyListeners();
-    return response;
-  }
-
-  // Real Supabase Auth: Sign Up New Parent Account
   Future<AuthResponse> signUpWithEmail({
     required String name,
     required String email,
@@ -736,33 +392,14 @@ class ParentAppProvider extends ChangeNotifier {
       password: password,
       confirmPassword: confirmPassword,
     );
-
-    if (response.status == AuthStatus.success && response.parent != null) {
-      _parent = response.parent!;
-      if (response.children != null && response.children!.isNotEmpty) {
-        _children = List.from(response.children!);
-        _selectedChild = _children.first;
-        _currentChildLoadToken++;
-
-        _loadSchoolBrandingForChild(_selectedChild!);
-        loadAttendanceForSelectedChild();
-        loadHomeworkForSelectedChild();
-        loadTimetableForSelectedChild();
-        loadFeeSummaryForSelectedChild();
-        loadResultsForSelectedChild();
-        loadNoticesForSelectedChild();
-        loadNotificationsForSelectedChild();
-      } else {
-        _children = [];
-        _selectedChild = null;
-        _branding = SchoolBrandModel.defaultNeutral();
+    if (response.status == AuthStatus.success) {
+      try {
+        await _loadSessionAndChildren();
+      } catch (e) {
+        _isLoggedIn = true;
+        _dashboardError = parentErrorMessage(e);
       }
-      _isLoggedIn = true;
-      _authError = null;
     } else {
-      _children = [];
-      _selectedChild = null;
-      _branding = SchoolBrandModel.defaultNeutral();
       _authError = response.errorMessage;
     }
 
@@ -771,65 +408,285 @@ class ParentAppProvider extends ChangeNotifier {
     return response;
   }
 
-  // Update Profile
-  Future<bool> updateProfile({
-    required String name,
-    required String phone,
-    String? avatarUrl,
-    String? relationship,
-  }) async {
-    final updated = await AuthService.updateParentProfile(
-      currentParent: _parent,
-      name: name,
-      phone: phone,
-      avatarUrl: avatarUrl,
-      relationship: relationship,
-    );
+  /// Redeems a Parent Access Code, then reloads the children from the server.
+  Future<LinkChildResponse> linkChildWithCode({required String codeOrStudentId, String relationship = 'Parent'}) async {
+    final res = await LinkChildService.claimChild(accessCode: codeOrStudentId, relationship: relationship);
+    if (res.status != LinkStatus.success && res.status != LinkStatus.alreadyLinked) return res;
 
-    if (updated != null) {
-      _parent = updated;
-      notifyListeners();
-      return true;
+    final studentId = res.studentId;
+    try {
+      await _loadSessionAndChildren();
+    } catch (e) {
+      return LinkChildResponse(
+        status: LinkStatus.networkError,
+        errorMessage: 'The child was linked, but the list could not be refreshed: ${parentErrorMessage(e)}',
+      );
     }
-    return false;
-  }
-
-  // Update Password
-  Future<AuthResponse> updatePassword({
-    required String newPassword,
-    required String confirmPassword,
-  }) async {
-    return await AuthService.updatePassword(
-      newPassword: newPassword,
-      confirmPassword: confirmPassword,
+    final linked = _children.where((c) => c.id == studentId).toList();
+    if (linked.isNotEmpty) selectChild(linked.first);
+    notifyListeners();
+    if (linked.isEmpty) {
+      // Claimed on the server but not visible in the session (e.g. the
+      // account is inactive): report it instead of showing success.
+      return LinkChildResponse(
+        status: LinkStatus.backendError,
+        errorMessage: _accountNotice ?? 'The child could not be loaded after linking. Please contact the school office.',
+      );
+    }
+    return LinkChildResponse(
+      status: res.status,
+      student: linked.first,
+      studentId: studentId,
+      userMessage: res.userMessage,
     );
   }
 
-  // Parent Logout & Secure State Clear
   Future<void> logout() async {
-    _currentChildLoadToken++;
     await AuthService.clearSession();
-    SchoolService.clearCache();
-    _isLoggedIn = false;
-    _children = [];
-    _selectedChild = null;
-    _selectedBottomNavIndex = 0;
-    _branding = SchoolBrandModel.defaultNeutral();
-
-    // Reset module caches to prevent data leakage on account switching
-    _todayAttendance = null;
-    _activeAttendanceSummary = null;
-    _activeHomeworkList = null;
-    _activeTimetableList = null;
-    _activeResultsList = null;
-    _activeFeeSummary = null;
-    _activeNoticesList = null;
-    _activeNotificationsList = null;
-
+    _resetState();
     notifyListeners();
   }
 
-  // Theme Mode
+  Future<void> retryDashboardLoad() async {
+    _isDashboardLoading = true;
+    _dashboardError = null;
+    notifyListeners();
+    try {
+      await _loadSessionAndChildren();
+    } catch (e) {
+      _dashboardError = parentErrorMessage(e);
+    }
+    _isDashboardLoading = false;
+    notifyListeners();
+  }
+
+  /// Pull-to-refresh: re-reads the session (links may have been revoked) and
+  /// every dataset of the selected child from the server.
+  Future<void> refreshData() async {
+    _isRefreshing = true;
+    notifyListeners();
+    try {
+      await _loadSessionAndChildren();
+      await _loadAllForSelectedChild();
+    } catch (e) {
+      _dashboardError = parentErrorMessage(e);
+    }
+    _isRefreshing = false;
+    notifyListeners();
+  }
+
+  Future<bool> updateProfile({required String name, required String phone, String? avatarUrl, String? relationship}) async {
+    try {
+      await AuthService.updateParentContact(name: name, phone: phone);
+      _parent = _parent.copyWith(name: name.trim(), phone: phone.trim());
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<AuthResponse> updatePassword({required String newPassword, required String confirmPassword}) {
+    return AuthService.updatePassword(newPassword: newPassword, confirmPassword: confirmPassword);
+  }
+
+  // ------------------------------------------------------------------
+  // Child selection
+  // ------------------------------------------------------------------
+  void selectChild(StudentModel child) {
+    if (!_children.any((c) => c.id == child.id)) return; // only server-verified children
+    if (_selectedChild?.id == child.id) return;
+    _selectChildInternal(child, force: true);
+    notifyListeners();
+  }
+
+  void _selectChildInternal(StudentModel? child, {bool force = false}) {
+    final changed = force || _selectedChild?.id != child?.id;
+    _selectedChild = child;
+    if (!changed) {
+      // Same child after a session reload: refresh its data in place.
+      if (child != null) _loadAllForSelectedChild();
+      return;
+    }
+    _loadToken++;
+    _clearChildData();
+    _branding = SchoolBrandModel.defaultNeutral();
+    _aiMessages = [];
+    if (child != null) _loadAllForSelectedChild();
+  }
+
+  Future<void> _loadAllForSelectedChild() async {
+    if (_selectedChild == null) return;
+    await Future.wait([
+      _loadSchoolForSelectedChild(),
+      loadAttendanceForSelectedChild(),
+      loadHomeworkForSelectedChild(),
+      loadTimetableForSelectedChild(),
+      loadFeeSummaryForSelectedChild(),
+      loadResultsForSelectedChild(),
+      loadExamsForSelectedChild(),
+      loadNoticesForSelectedChild(),
+      loadNotificationsForSelectedChild(),
+    ]);
+    _lastSyncedAt = DateTime.now();
+    notifyListeners();
+  }
+
+  /// Runs [load] for the selected child and applies the result only if the
+  /// same child is still selected when it completes.
+  Future<void> _guarded<T>({
+    required Future<T> Function(String studentId) load,
+    required void Function(bool loading) setLoading,
+    required void Function(String? error) setError,
+    required void Function(T value) apply,
+  }) async {
+    final child = _selectedChild;
+    if (child == null) return;
+    final token = _loadToken;
+    setLoading(true);
+    setError(null);
+    notifyListeners();
+    try {
+      final value = await load(child.id);
+      if (token != _loadToken || _selectedChild?.id != child.id) return;
+      apply(value);
+    } catch (e) {
+      if (token != _loadToken || _selectedChild?.id != child.id) return;
+      setError(parentErrorMessage(e));
+      if (e is ParentDataException && e.kind == ParentDataErrorKind.notAuthorized) {
+        // The link was revoked or the session ended: re-read the session.
+        unawaited(retryDashboardLoad());
+      }
+    } finally {
+      if (token == _loadToken && _selectedChild?.id == child.id) {
+        setLoading(false);
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _loadSchoolForSelectedChild() => _guarded<SchoolBrandModel>(
+        load: (id) => SchoolService.fetchSchoolForStudent(id),
+        setLoading: (_) {},
+        setError: (_) {},
+        apply: (b) => _branding = b,
+      );
+
+  Future<void> loadAttendanceForSelectedChild() => _guarded<(MonthlyAttendanceSummary, DailyAttendance?)>(
+        load: (id) async {
+          final month = await AttendanceService.fetchAttendanceForStudent(
+              studentId: id, year: _attendanceYear, month: _attendanceMonth);
+          final today = await AttendanceService.fetchTodayAttendance(studentId: id);
+          return (month, today);
+        },
+        setLoading: (v) => _isAttendanceLoading = v,
+        setError: (e) => _attendanceError = e,
+        apply: (r) {
+          _activeAttendanceSummary = r.$1;
+          _todayAttendance = r.$2;
+        },
+      );
+
+  Future<void> changeAttendanceMonth(int year, int month) async {
+    _attendanceYear = year;
+    _attendanceMonth = month;
+    _activeAttendanceSummary = null;
+    await loadAttendanceForSelectedChild();
+  }
+
+  Future<void> loadHomeworkForSelectedChild() => _guarded<List<HomeworkModel>>(
+        load: (id) => HomeworkService.fetchHomeworkForStudent(studentId: id),
+        setLoading: (v) => _isHomeworkLoading = v,
+        setError: (e) => _homeworkError = e,
+        apply: (v) => _activeHomeworkList = v,
+      );
+
+  Future<void> loadTimetableForSelectedChild() => _guarded<List<TimetableEntryModel>>(
+        load: (id) => TimetableService.fetchTimetableForStudent(studentId: id),
+        setLoading: (v) => _isTimetableLoading = v,
+        setError: (e) => _timetableError = e,
+        apply: (v) => _activeTimetableList = v,
+      );
+
+  Future<void> loadFeeSummaryForSelectedChild() => _guarded<FeeSummaryModel>(
+        load: (id) => FeeService.fetchFeeSummaryForStudent(studentId: id),
+        setLoading: (v) => _isFeesLoading = v,
+        setError: (e) => _feesError = e,
+        apply: (v) => _activeFeeSummary = v,
+      );
+
+  Future<void> loadResultsForSelectedChild() => _guarded<List<ExamResultModel>>(
+        load: (id) => ResultService.fetchResultsForStudent(studentId: id),
+        setLoading: (v) => _isResultsLoading = v,
+        setError: (e) => _resultsError = e,
+        apply: (v) => _activeResultsList = v,
+      );
+
+  Future<void> loadExamsForSelectedChild() => _guarded<List<ExamModel>>(
+        load: (id) => ResultService.fetchExamScheduleForStudent(studentId: id),
+        setLoading: (v) => _isExamsLoading = v,
+        setError: (e) => _examsError = e,
+        apply: (v) => _activeExamsList = v,
+      );
+
+  Future<void> loadNoticesForSelectedChild() => _guarded<List<NoticeModel>>(
+        load: (id) => NoticeService.fetchNoticesForParent(studentId: id),
+        setLoading: (v) => _isNoticesLoading = v,
+        setError: (e) => _noticesError = e,
+        apply: (v) => _activeNoticesList = v,
+      );
+
+  Future<void> loadNotificationsForSelectedChild() => _guarded<List<AppNotificationModel>>(
+        load: (id) => NotificationService.fetchNotificationsForParent(studentId: id),
+        setLoading: (v) => _isNotificationsLoading = v,
+        setError: (e) => _notificationsError = e,
+        apply: (v) => _activeNotificationsList = v,
+      );
+
+  /// Records the read on the server first; the badge changes only if it
+  /// succeeded. Returns false (and keeps the item unread) on failure.
+  Future<bool> markAppNotificationAsRead(String notificationId) async {
+    try {
+      await NotificationService.markRead(ids: [notificationId]);
+    } catch (_) {
+      return false;
+    }
+    _activeNotificationsList = _activeNotificationsList
+        ?.map((n) => n.id == notificationId ? n.copyWith(isRead: true) : n)
+        .toList();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> markAllNotificationsRead() async {
+    try {
+      await NotificationService.markRead();
+    } catch (_) {
+      return false;
+    }
+    _activeNotificationsList = _activeNotificationsList?.map((n) => n.copyWith(isRead: true)).toList();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> markNoticeAsRead(String noticeId) async {
+    try {
+      await NoticeService.markNoticeAsRead(noticeId: noticeId);
+    } catch (_) {
+      return false;
+    }
+    _activeNoticesList = _activeNoticesList?.map((n) => n.id == noticeId ? n.copyWith(isRead: true) : n).toList();
+    // The notice's announcement notification is read now as well.
+    _activeNotificationsList = _activeNotificationsList
+        ?.map((n) => n.targetType == 'notice' && n.targetId == noticeId ? n.copyWith(isRead: true) : n)
+        .toList();
+    notifyListeners();
+    return true;
+  }
+
+  // ------------------------------------------------------------------
+  // UI preferences
+  // ------------------------------------------------------------------
   void setThemeMode(ThemeMode mode) {
     if (_themeMode != mode) {
       _themeMode = mode;
@@ -842,290 +699,107 @@ class ParentAppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Child Switching
-  void selectChild(StudentModel child) {
-    if (_selectedChild == null || _selectedChild!.id != child.id) {
-      _selectedChild = child;
-      _currentChildLoadToken++;
-
-      // Immediately clear previous child's cached datasets to prevent race-condition data leaks
-      _todayAttendance = null;
-      _activeAttendanceSummary = null;
-      _activeHomeworkList = null;
-      _activeTimetableList = null;
-      _activeResultsList = null;
-      _activeFeeSummary = null;
-      _activeNoticesList = null;
-      _activeNotificationsList = null;
-
-      _aiMessages = [
-        AiMessageModel(
-          id: 'AI-SWITCH-${DateTime.now().millisecondsSinceEpoch}',
-          text: 'Switched profile to ${_selectedChild!.name} (${_selectedChild!.className}). How can I assist you with ${_selectedChild!.name}\'s academics today?',
-          isUser: false,
-          timestamp: DateTime.now(),
-        ),
-      ];
-      _loadSchoolBrandingForChild(child);
-      loadAttendanceForSelectedChild();
-      loadHomeworkForSelectedChild();
-      loadTimetableForSelectedChild();
-      loadResultsForSelectedChild();
-      loadFeeSummaryForSelectedChild();
-      loadNoticesForSelectedChild();
-      loadNotificationsForSelectedChild();
-      notifyListeners();
-    }
-  }
-
   void setBottomNavIndex(int index) {
     _selectedBottomNavIndex = index;
     notifyListeners();
   }
 
-  // Pull to refresh simulation
-  Future<void> refreshData() async {
-    _isRefreshing = true;
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 600));
-    _lastUpdatedTime = 'Just now';
-    _isRefreshing = false;
-    notifyListeners();
-  }
+  // ------------------------------------------------------------------
+  // Features that have no backend workflow (product decision pending).
+  // They do nothing and report that, instead of faking success.
+  // ------------------------------------------------------------------
+  bool sendMessageReply(String threadId, String text) => false;
+  void markThreadRead(String threadId) {}
 
-  // Child-Specific Data Getters
-  MonthlyAttendanceSummary get currentAttendance {
-    if (_activeAttendanceSummary != null) {
-      return _activeAttendanceSummary!;
-    }
-    return const MonthlyAttendanceSummary(
-      monthYear: 'September 2026',
-      totalWorkingDays: 0,
-      presentDays: 0,
-      absentDays: 0,
-      lateDays: 0,
-      holidayDays: 0,
-      percentage: 0.0,
-      dailyRecords: [],
-    );
-  }
-
-  FeeSummaryModel get currentFeeSummary {
-    if (_activeFeeSummary != null) {
-      return _activeFeeSummary!;
-    }
-    return FeeSummaryModel.fromData(
-      studentId: _selectedChild?.id ?? '',
-      schoolId: _selectedChild?.schoolId ?? '',
-      academicYearId: _selectedChild?.academicYear ?? '',
-    );
-  }
-
-  List<HomeworkModel> get currentHomeworkList {
-    if (_activeHomeworkList != null) {
-      return _activeHomeworkList!;
-    }
-    return [];
-  }
-
-  List<ExamModel> get currentExamsList {
-    return [];
-  }
-
-  List<ExamResultModel> get currentResultsList {
-    if (_activeResultsList != null) {
-      return _activeResultsList!;
-    }
-    return [];
-  }
-
-  Map<String, List<TimetableEntryModel>> get currentTimetable {
-    if (_activeTimetableList != null && _activeTimetableList!.isNotEmpty) {
-      final Map<String, List<TimetableEntryModel>> map = {
-        'Monday': [],
-        'Tuesday': [],
-        'Wednesday': [],
-        'Thursday': [],
-        'Friday': [],
-        'Saturday': [],
-      };
-      for (final entry in _activeTimetableList!) {
-        final day = entry.dayOfWeek.substring(0, 1).toUpperCase() + entry.dayOfWeek.substring(1).toLowerCase();
-        if (map.containsKey(day)) {
-          map[day]!.add(entry);
-        } else {
-          map[day] = [entry];
-        }
-      }
-      return map;
-    }
-    return {};
-  }
-
-  PtmModel? get currentPtmSchedule {
-    if (_selectedChild == null) return null;
-    return MockData.ptmSchedules[_selectedChild!.id];
-  }
-
-  List<DocumentModel> get currentDocuments {
-    if (_selectedChild == null) return [];
-    return MockData.getDocuments(_selectedChild!.id);
-  }
-
-  List<MessageThread> get currentMessagesList {
-    return [];
-  }
-
-  int get unreadMessagesCount {
-    return currentMessagesList.fold(0, (sum, t) => sum + t.unreadCount);
-  }
-
-  TransportModel? get currentTransport {
-    return null;
-  }
-
-  List<CalendarEventModel> get calendarEvents => MockData.calendarEvents;
-
-  TimetableEntryModel? get nextClassEntry {
-    final timetable = currentTimetable;
-    final mondayClasses = timetable['MONDAY'] ?? timetable['Monday'] ?? [];
-    if (mondayClasses.isNotEmpty) {
-      return mondayClasses.firstWhere(
-        (e) => !e.isBreak,
-        orElse: () => mondayClasses.first,
-      );
-    }
-    return null;
-  }
-
-  List<NoticeModel> get notices => _activeNoticesList ?? [];
-
-  List<AppNotificationModel> get notifications => _activeNotificationsList ?? _notifications;
-
-  // Messaging Interactions
-  void sendMessageReply(String threadId, String text) {
-    if (text.trim().isEmpty) return;
-  }
-
-  void markThreadRead(String threadId) {
-  }
-
-  // AI Assistant Query Handler
-  void sendAiPrompt(String userQuery) {
-    if (userQuery.trim().isEmpty) return;
-
-    final userMsg = AiMessageModel(
-      id: 'AI-USR-${DateTime.now().millisecondsSinceEpoch}',
-      text: userQuery,
-      isUser: true,
-      timestamp: DateTime.now(),
-    );
-    _aiMessages.add(userMsg);
-    notifyListeners();
-
-    if (_selectedChild == null) {
-      final botMsg = AiMessageModel(
-        id: 'AI-BOT-${DateTime.now().millisecondsSinceEpoch}',
-        text: 'Please link a student profile using your school\'s Parent Access Code to access student information.',
-        isUser: false,
-        timestamp: DateTime.now(),
-      );
-      _aiMessages.add(botMsg);
-      notifyListeners();
-      return;
-    }
-
-    final childName = _selectedChild!.name;
-    final queryLower = userQuery.toLowerCase();
-    String responseText;
-
-    if (queryLower.contains('attendance')) {
-      final att = currentAttendance;
-      responseText = '$childName\'s overall attendance for ${att.monthYear} is ${att.percentage.toInt()}% with ${att.presentDays} days present, ${att.absentDays} days absent, and ${att.lateDays} day late out of ${att.totalWorkingDays} working days.';
-    } else if (queryLower.contains('fee') || queryLower.contains('fees') || queryLower.contains('due')) {
-      final fee = currentFeeSummary;
-      if (fee.pendingAmount > 0) {
-        final dueStr = fee.dueDate != null ? 'due by ${DateFormatter.formatShort(fee.dueDate!)}' : 'due soon';
-        responseText = '$childName has a pending fee balance of ${CurrencyFormatter.formatINR(fee.pendingAmount)} $dueStr. Net fee is ${CurrencyFormatter.formatINR(fee.netFee)}, and ${CurrencyFormatter.formatINR(fee.paidAmount)} has already been paid.';
-      } else {
-        responseText = 'All academic fees for $childName are fully settled (${CurrencyFormatter.formatINR(fee.netFee)} paid, ₹0 pending).';
-      }
-    } else if (queryLower.contains('homework') || queryLower.contains('assignment')) {
-      final hwList = currentHomeworkList;
-      final pending = hwList.where((h) => !h.isCompleted).toList();
-      if (pending.isNotEmpty) {
-        final titles = pending.map((h) => '${h.subject}: "${h.title}" (Due ${DateFormatter.formatShort(h.dueDate)})').join('\n• ');
-        responseText = '$childName currently has ${pending.length} pending homework assignment(s):\n• $titles';
-      } else {
-        responseText = 'Great news! $childName has no pending homework assignments.';
-      }
-    } else if (queryLower.contains('exam') || queryLower.contains('test')) {
-      final exams = currentExamsList;
-      final upcoming = exams.where((e) => e.isUpcoming).toList();
-      if (upcoming.isNotEmpty) {
-        final examDetails = upcoming.map((e) => '${e.subject} on ${DateFormatter.formatShort(e.examDate)} (${e.timeSlot})').join(', ');
-        responseText = 'The next upcoming examination(s) for $childName are: $examDetails.';
-      } else {
-        responseText = 'There are no upcoming examinations scheduled in the next 14 days.';
-      }
-    } else if (queryLower.contains('bus') || queryLower.contains('transport')) {
-      final trans = currentTransport;
-      if (trans != null) {
-        responseText = '$childName travels via ${trans.busNumber} (${trans.routeName}). Driver: ${trans.driverName} (${trans.driverPhone}). Current status: ${trans.currentStatus}.';
-      } else {
-        responseText = 'No bus route details available for $childName.';
-      }
-    } else {
-      responseText = 'Regarding $childName (Class ${_selectedChild!.className}): Attendance is ${currentAttendance.percentage.toInt()}%, Pending fee is ${CurrencyFormatter.formatINR(currentFeeSummary.pendingAmount)}, and Class Teacher is ${_selectedChild!.classTeacher}. How else can I assist?';
-    }
-
-    final botMsg = AiMessageModel(
-      id: 'AI-BOT-${DateTime.now().millisecondsSinceEpoch}',
-      text: responseText,
-      isUser: false,
-      timestamp: DateTime.now(),
-    );
-    _aiMessages.add(botMsg);
-    notifyListeners();
-  }
-
-  // Interactive Mutations
-  void toggleHomeworkCompletion(String homeworkId) {
-    if (_activeHomeworkList != null) {
-      final index = _activeHomeworkList!.indexWhere((h) => h.id == homeworkId);
-      if (index != -1) {
-        _activeHomeworkList![index] = _activeHomeworkList![index].copyWith(
-          isCompleted: !_activeHomeworkList![index].isCompleted,
-        );
-        notifyListeners();
-      }
-    }
-  }
-
-  void markAllNotificationsRead() {
-    _notifications = _notifications.map((n) => n.copyWith(isRead: true)).toList();
-    notifyListeners();
-  }
-
-  void submitCorrectionRequest({
+  /// Correction requests are not supported by School OS yet: nothing is sent.
+  bool submitCorrectionRequest({
     required String fieldName,
     required String currentValue,
     required String requestedValue,
     required String reason,
-  }) {
-    if (_selectedChild == null) return;
+  }) =>
+      false;
 
-    final newReq = CorrectionRequestModel(
-      id: 'REQ-${DateTime.now().millisecondsSinceEpoch}',
-      studentId: _selectedChild!.id,
-      studentName: _selectedChild!.name,
-      fieldName: fieldName,
-      currentValue: currentValue,
-      requestedValue: requestedValue,
-      reason: reason,
-      dateSubmitted: DateTime.now(),
-    );
-    _correctionRequests.add(newReq);
+  // ------------------------------------------------------------------
+  // Assistant: answers only from data already loaded from the school.
+  // ------------------------------------------------------------------
+  void sendAiPrompt(String userQuery) {
+    if (userQuery.trim().isEmpty) return;
+    _aiMessages.add(AiMessageModel(
+      id: 'AI-USR-${DateTime.now().microsecondsSinceEpoch}',
+      text: userQuery,
+      isUser: true,
+      timestamp: DateTime.now(),
+    ));
+
+    String reply;
+    final child = _selectedChild;
+    if (child == null) {
+      reply = 'Please link your child with the Parent Access Code from your school first.';
+    } else {
+      final q = userQuery.toLowerCase();
+      final name = child.name;
+      if (q.contains('attendance')) {
+        final att = _activeAttendanceSummary;
+        reply = att == null
+            ? 'Attendance for $name has not loaded yet. Open Attendance and pull to refresh.'
+            : (!att.hasRecords
+                ? 'No attendance has been recorded for $name in ${att.monthYear}.'
+                : '$name: ${att.percentage.toStringAsFixed(0)}% in ${att.monthYear} '
+                    '(${att.presentDays} present, ${att.lateDays} late, ${att.absentDays} absent, ${att.leaveDays} leave).');
+      } else if (q.contains('fee') || q.contains('due') || q.contains('payment')) {
+        final fee = _activeFeeSummary;
+        if (fee == null) {
+          reply = 'Fee details for $name have not loaded yet. Open Fees and pull to refresh.';
+        } else if (!fee.hasFeeAccount) {
+          reply = 'The school has not assigned fees to $name yet.';
+        } else {
+          final due = fee.dueDate != null ? ' (due ${DateFormatter.formatShort(fee.dueDate!)})' : '';
+          reply = 'Net fee ${CurrencyFormatter.formatINR(fee.netFee)}, paid ${CurrencyFormatter.formatINR(fee.paidAmount)}, '
+              'balance ${CurrencyFormatter.formatINR(fee.outstandingAmount)}$due.';
+        }
+      } else if (q.contains('homework') || q.contains('assignment')) {
+        final hw = _activeHomeworkList;
+        if (hw == null) {
+          reply = 'Homework has not loaded yet.';
+        } else {
+          final upcoming = hw.where((h) => !h.isOverdue).toList();
+          reply = upcoming.isEmpty
+              ? 'No upcoming homework for $name.'
+              : 'Upcoming homework:\n• ${upcoming.map((h) => '${h.subject}: ${h.title} (due ${DateFormatter.formatShort(h.dueDate)})').join('\n• ')}';
+        }
+      } else if (q.contains('exam') || q.contains('test')) {
+        final exams = _activeExamsList;
+        final upcoming = (exams ?? const <ExamModel>[]).where((e) => e.isUpcoming).toList();
+        reply = exams == null
+            ? 'The exam schedule has not loaded yet.'
+            : (upcoming.isEmpty
+                ? 'No upcoming exams are scheduled for $name.'
+                : 'Upcoming: ${upcoming.map((e) => '${e.title}${e.subject.isNotEmpty ? ' – ${e.subject}' : ''}'
+                    '${e.examDate != null ? ' on ${DateFormatter.formatShort(e.examDate!)}' : ''}').join('; ')}.');
+      } else {
+        reply = 'I can summarise attendance, fees, homework and exams for $name from the school\'s records. What would you like to know?';
+      }
+    }
+
+    _aiMessages.add(AiMessageModel(
+      id: 'AI-BOT-${DateTime.now().microsecondsSinceEpoch}',
+      text: reply,
+      isUser: false,
+      timestamp: DateTime.now(),
+    ));
+    notifyListeners();
+  }
+
+  /// Test hook: set the server-verified session without network calls.
+  @visibleForTesting
+  void debugSetSession(ParentModel parent, List<StudentModel> children) {
+    _parent = parent;
+    _children = List.of(children);
+    _isLoggedIn = true;
+    _isSessionChecking = false;
+    _selectedChild = null;
+    _selectChildInternal(children.isEmpty ? null : children.first, force: true);
     notifyListeners();
   }
 }

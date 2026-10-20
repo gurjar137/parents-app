@@ -43,11 +43,10 @@ class ParentModel {
   factory ParentModel.fromMap(Map<String, dynamic> map, String fallbackId) {
     return ParentModel(
       id: map['id'] ?? map['auth_user_id'] ?? fallbackId,
-      name: map['name'] ?? map['full_name'] ?? 'Parent User',
+      name: map['full_name'] ?? map['parent_name'] ?? map['name'] ?? '',
       email: map['email'] ?? '',
       phone: map['phone'] ?? map['mobile_number'] ?? '',
-      avatarUrl: map['avatar_url'] ??
-          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=300&h=300',
+      avatarUrl: map['avatar_url'] ?? '',
       relationship: map['relationship'] ?? 'Parent / Guardian',
       status: map['status'] ?? 'active',
       schoolId: map['school_id'],

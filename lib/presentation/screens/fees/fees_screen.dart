@@ -20,7 +20,7 @@ class FeesScreen extends StatelessWidget {
     final child = provider.selectedChild;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (provider.isFeesLoading) {
+    if (!provider.hasFeeData && provider.feesError == null) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Fees & Dues • ${child.name}', style: AppTextStyles.headingSmall),
@@ -42,7 +42,7 @@ class FeesScreen extends StatelessWidget {
       );
     }
 
-    if (provider.feesError != null) {
+    if (provider.feesError != null && !provider.isFeesLoading) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Fees & Dues • ${child.name}', style: AppTextStyles.headingSmall),
@@ -63,7 +63,7 @@ class FeesScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Please check your internet connection and try again.',
+                  provider.feesError!,
                   style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
                   textAlign: TextAlign.center,
                 ),
@@ -130,7 +130,11 @@ class FeesScreen extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 24,
-                        backgroundImage: NetworkImage(child.avatarUrl),
+                        backgroundColor: AppColors.brandIndigo,
+                        child: Text(
+                          child.name.isNotEmpty ? child.name[0].toUpperCase() : '?',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -145,7 +149,11 @@ class FeesScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              'ADM: ${child.admissionNo} • Class ${child.className}',
+                              [
+                                if (child.admissionNo.isNotEmpty) 'ADM: ${child.admissionNo}',
+                                if (child.className.isNotEmpty) 'Class ${child.className}',
+                                if (fee.academicYearName.isNotEmpty) 'Session ${fee.academicYearName}',
+                              ].join(' • '),
                               style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -397,21 +405,26 @@ class FeesScreen extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Receipt: ${payment.receiptNo}',
+                                      payment.receiptNo.isNotEmpty ? 'Receipt: ${payment.receiptNo}' : 'Payment',
                                       style: AppTextStyles.headingSmall.copyWith(fontSize: 14),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${DateFormatter.formatShort(payment.date)} • ${payment.paymentMethod}',
+                                      [
+                                        if (payment.date != null) DateFormatter.formatShort(payment.date!),
+                                        if (payment.paymentMethod.isNotEmpty) payment.paymentMethod,
+                                      ].join(' • '),
                                       style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Balance: ${CurrencyFormatter.formatINR(payment.remainingBalance)}',
-                                      style: AppTextStyles.caption.copyWith(color: AppColors.warning),
-                                    ),
+                                    if (payment.remainingBalance != null) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Balance: ${CurrencyFormatter.formatINR(payment.remainingBalance!)}',
+                                        style: AppTextStyles.caption.copyWith(color: AppColors.warning),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

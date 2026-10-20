@@ -1,77 +1,27 @@
-import 'package:flutter/foundation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/models/notification_model.dart';
-import 'supabase_service.dart';
+import 'parent_api.dart';
 
+/// In-app notifications stored in `public.notifications` by School OS events
+/// (fee payments, absences, homework, published results, parent notices).
+///
+/// Remote push (FCM) is NOT implemented: the project has no Firebase
+/// configuration and no server-side sender. Notifications appear when the app
+/// loads or refreshes them.
 class NotificationService {
-  /// Securely registers the device push notification token for the authenticated parent
-  static Future<void> registerDeviceToken({
-    required String parentAuthId,
-    required String schoolId,
-    String? token,
-  }) async {
-    if (SupabaseService.isInitialized && parentAuthId.isNotEmpty) {
-      try {
-        final deviceToken = token ?? 'fcm_token_parent_${parentAuthId.substring(0, 4)}';
-        await SupabaseService.client.from('parent_devices').upsert({
-          'parent_auth_user_id': parentAuthId,
-          'school_id': schoolId,
-          'device_token': deviceToken,
-          'platform': kIsWeb ? 'web' : (defaultTargetPlatform == TargetPlatform.iOS ? 'ios' : 'android'),
-          'is_active': true,
-          'updated_at': DateTime.now().toIso8601String(),
-        });
-      } catch (e) {
-        if (kDebugMode) debugPrint('[NotificationService] Device token registration notice: $e');
-      }
-    }
+  /// Notifications for the signed-in parent. With [studentId], rows about
+  /// other children are left out (school-wide ones stay).
+  static Future<List<AppNotificationModel>> fetchNotificationsForParent({String? studentId}) async {
+    final rows = await ParentApi.instance.rpcList('parent_get_notifications', {
+      'p_student_id': (studentId == null || studentId.isEmpty) ? null : studentId,
+      'p_limit': 200,
+    });
+    return rows.map(AppNotificationModel.fromMap).toList();
   }
 
-  /// Fetches live push notifications history for the authenticated parent
-  static Future<List<AppNotificationModel>> fetchNotificationsForParent({
-    required String parentAuthId,
-    required String schoolId,
-    required String studentId,
-  }) async {
-    if (SupabaseService.isInitialized && parentAuthId.isNotEmpty) {
-      try {
-        final List<dynamic> response = await SupabaseService.client
-            .from('parent_notifications')
-            .select()
-            .eq('parent_auth_user_id', parentAuthId)
-            .eq('school_id', schoolId)
-            .order('created_at', ascending: false);
-
-        if (response.isNotEmpty) {
-          return response
-              .map((map) => AppNotificationModel.fromMap(map as Map<String, dynamic>))
-              .toList();
-        }
-      } on PostgrestException catch (e) {
-        if (kDebugMode) debugPrint('[NotificationService] PostgrestException notice: ${e.message}');
-      } catch (e) {
-        if (kDebugMode) debugPrint('[NotificationService] Fetch notifications notice: $e');
-      }
-    }
-
-    return [];
-  }
-
-  /// Marks a specific notification as read in database
-  static Future<void> markNotificationAsRead({
-    required String notificationId,
-    required String parentAuthId,
-  }) async {
-    if (SupabaseService.isInitialized && parentAuthId.isNotEmpty) {
-      try {
-        await SupabaseService.client
-            .from('parent_notifications')
-            .update({'is_read': true})
-            .eq('id', notificationId)
-            .eq('parent_auth_user_id', parentAuthId);
-      } catch (e) {
-        if (kDebugMode) debugPrint('[NotificationService] Mark notification read notice: $e');
-      }
-    }
+  /// Marks [ids] read for this parent only; `null` marks every notification
+  /// visible to this parent. Returns the number of new read marks.
+  static Future<int> markRead({List<String>? ids}) async {
+    final res = await ParentApi.instance.rpc('parent_mark_notifications_read', {'p_ids': ids});
+    return res is num ? res.toInt() : int.tryParse('$res') ?? 0;
   }
 }

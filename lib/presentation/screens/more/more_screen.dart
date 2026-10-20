@@ -53,7 +53,12 @@ class MoreScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 26,
-                    backgroundImage: NetworkImage(parent.avatarUrl),
+                    backgroundColor: AppColors.brandIndigo,
+                    backgroundImage: parent.avatarUrl.startsWith('http') ? NetworkImage(parent.avatarUrl) : null,
+                    child: parent.avatarUrl.startsWith('http')
+                        ? null
+                        : Text(parent.name.isNotEmpty ? parent.name[0].toUpperCase() : '?',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(

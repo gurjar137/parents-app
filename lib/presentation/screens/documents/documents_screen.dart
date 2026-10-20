@@ -25,8 +25,8 @@ class DocumentsScreen extends StatelessWidget {
       body: documents.isEmpty
           ? const EmptyStateWidget(
               icon: Icons.folder_open_rounded,
-              title: 'No documents available',
-              description: 'Official documents issued by the school administration will appear here.',
+              title: 'Documents not available',
+              description: 'Downloading school documents is not available in the Parents App yet. Please contact the school office.',
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -36,14 +36,7 @@ class DocumentsScreen extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: AnimatedCard(
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Downloading ${doc.title}...'),
-                          backgroundColor: AppColors.brandIndigo,
-                        ),
-                      );
-                    },
+                    onTap: null,
                     child: Row(
                       children: [
                         Container(

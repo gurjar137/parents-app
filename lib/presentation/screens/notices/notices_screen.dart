@@ -34,7 +34,7 @@ class _NoticesScreenState extends State<NoticesScreen> {
     final child = provider.selectedChild;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (provider.isNoticesLoading) {
+    if (!provider.hasNoticesData && provider.noticesError == null) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Notices & Announcements • ${child.name}', style: AppTextStyles.headingSmall),
@@ -56,7 +56,7 @@ class _NoticesScreenState extends State<NoticesScreen> {
       );
     }
 
-    if (provider.noticesError != null) {
+    if (provider.noticesError != null && !provider.isNoticesLoading) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Notices & Announcements • ${child.name}', style: AppTextStyles.headingSmall),

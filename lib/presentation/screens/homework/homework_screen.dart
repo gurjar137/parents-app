@@ -42,7 +42,7 @@ class _HomeworkScreenState extends State<HomeworkScreen> with SingleTickerProvid
     final child = provider.selectedChild;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (provider.isHomeworkLoading) {
+    if (!provider.hasHomeworkData && provider.homeworkError == null) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Homework Assignments', style: AppTextStyles.headingSmall),
@@ -64,7 +64,7 @@ class _HomeworkScreenState extends State<HomeworkScreen> with SingleTickerProvid
       );
     }
 
-    if (provider.homeworkError != null) {
+    if (provider.homeworkError != null && !provider.isHomeworkLoading) {
       return Scaffold(
         appBar: AppBar(
           title: Text('Homework Assignments', style: AppTextStyles.headingSmall),

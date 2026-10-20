@@ -25,8 +25,8 @@ class MessagesScreen extends StatelessWidget {
       body: threads.isEmpty
           ? const EmptyStateWidget(
               icon: Icons.chat_bubble_outline_rounded,
-              title: 'No new messages',
-              description: 'Messages and academic remarks from class teachers will appear here.',
+              title: 'Messaging not available',
+              description: 'Messaging teachers is not available in the Parents App yet. Please contact the school office.',
             )
           : ListView.builder(
               padding: const EdgeInsets.all(16),
