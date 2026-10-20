@@ -4,7 +4,10 @@ Target project: **`hnvjenkeimzkdgkuwbeb`** (the only project in both apps' confi
 `E:\parents app\lib\core\config\supabase_config.dart` and `E:\school app\dart_define.json`).
 Run SQL only in the SQL editor of that project. Stop if the dashboard shows any other reference.
 
-> **Production blocker (live, 20 Oct 2026):** anonymous callers can still run
+> **Status 20 Oct 2026:** steps 1–4 are done (07b, 08, 08a applied; 09 = 31/31 PASS). Next: step 5
+> onwards. The note below is kept for other environments.
+>
+> **Production blocker (was live before 07b):** anonymous callers can still run
 > `lookup_student_by_parent_access_code`, `get_parent_student_attendance` and
 > `get_parent_student_published_results`. Until step 2 is applied and verified, **do not hand out or
 > display Parent Access Codes**, and treat any code already issued as exposing that student's details.

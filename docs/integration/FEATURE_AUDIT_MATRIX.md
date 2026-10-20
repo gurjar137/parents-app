@@ -4,9 +4,11 @@ Statuses: **CODE TESTED** = covered by offline unit/widget tests (fake RPC gatew
 **PENDING MIGRATION** = needs `07b`/`08` deployed · **NOT VERIFIED (LIVE)** = never exercised against the
 live database with signed-in users · **NOT IMPLEMENTED** · **PENDING CONFIG** · **BLOCKED**.
 
-No feature is LIVE VERIFIED: `07b`, `08` and `09` have not been run on the database (no database
-credentials in this environment). The SQL was checked by the PostgreSQL parser (libpg_query 18) only,
-which does not prove the column names or semantics against the live schema.
+**Update 20 Oct 2026:** `07b`, `08` and `08a` are deployed on `hnvjenkeimzkdgkuwbeb` and `09` passed 31/31
+on the live schema. Every row below marked PENDING MIGRATION with a `09 T…` reference is therefore
+**DATABASE LIVE VERIFIED** (server functions, RLS and triggers with test identities). Row 3 (anonymous
+exposure) is **FIXED AND LIVE VERIFIED**. The two apps have not yet been exercised end to end against
+the live database with real test accounts.
 
 | # | Feature | School OS side | Parents App side | Authoritative data / RPC | Authorization (server) | Status |
 |---|---|---|---|---|---|---|

@@ -15,7 +15,30 @@ Supabase project for both apps: `hnvjenkeimzkdgkuwbeb`.
 `limit=0`, row *counts* as anonymous (`HEAD`, all 0), and RPC calls with a non-existent code and
 random UUIDs.
 
-## Production blocker
+## Live deployment and verification (20 Oct 2026, project hnvjenkeimzkdgkuwbeb)
+Applied by the school owner in the SQL editor: `08`, `07b` (after a fix, commit `c64bb35`) and `08a`
+(claim reason fix, commit `5523bd1`).
+- `07b` verification query: `anon_can_execute = false` for every listed function. The original
+  `get_parent_student_published_results` is in `school_os_repair` with no client access; the public
+  wrapper is `authenticated` only.
+- `08a` check: `anon_can_execute = false`, `fix_applied = true`.
+- External re-probe with the publishable key: `lookup_student_by_parent_access_code` and
+  `get_parent_student_attendance` no longer exist; `get_parent_student_published_results`,
+  `get_student_attendance_for_parent`, `parent_*` and `record_fee_payment` return 42501 to anonymous
+  callers. **The anonymous exposure is closed.**
+- `09` (rolled back): **31 / 31 PASS**. Covers claim flow, single claim, rate limit, cross-school
+  refusal, staff refusal, payment + server receipt + notification, idempotent retry, overpayment,
+  role checks, receipt/fee isolation, direct-read limits, parent notices, notifications and per-user
+  read state, absence/homework/results notifications, unlinking, deactivation, anonymous refusal,
+  payroll/leave/profile isolation.
+- Earlier runs failed only on test fixtures (live CHECK values for `notices.priority` and
+  `homework.status`) and revealed one real bug (first claim reported `ALREADY_LINKED`), fixed by `08a`
+  and in the app (`d2daa66`).
+
+Still not verified: the end-to-end check with real test accounts in both apps (DEPLOYMENT_GUIDE §6)
+and the store releases.
+
+## Production blocker (resolved 20 Oct 2026, see above)
 Live on 21 Oct 2026, anonymous callers can execute:
 - `lookup_student_by_parent_access_code(p_code)`: returns a student row for a valid code.
 - `get_parent_student_attendance(p_student_id)`: attendance for a student id.
