@@ -36,6 +36,15 @@ Database objects added by 07b/08 (pending deployment):
 - **Removed (backed up):** `lookup_student_by_parent_access_code`, `get_parent_student_attendance`,
   `get_parent_student_fees`, and the policies from the Parents App's own migrations.
 
+## Parent Code sign-in (21 Oct 2026)
+- School OS: `database_repair/10_parent_code_login.sql`, `11_parent_code_login_tests_rolled_back.sql`,
+  `supabase/functions/parent-code-login/{index.ts,login.ts,login_test.ts,README.md}` (new).
+- Parents App: `AuthService.signInWithParentCode` (Edge Function + `verifyOTP`),
+  `ParentAppProvider.loginWithParentCode`, code-only `ParentLoginScreen`; parent profile hides password,
+  synthetic email and the inert biometric switch; `parent_signup_screen.dart` and
+  `forgot_password_screen.dart` deleted (unreachable); tests in `auth_and_linking_test.dart` and
+  `parent_identity_security_regression_test.dart`.
+
 ## Parents App (`E:\parents app`)
 **New**
 - `lib/core/services/parent_api.dart`: RPC gateway, `ParentDataException`, error mapping.

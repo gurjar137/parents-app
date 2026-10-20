@@ -18,8 +18,6 @@ class ParentProfileScreen extends StatefulWidget {
 }
 
 class _ParentProfileScreenState extends State<ParentProfileScreen> {
-  bool _biometricLock = true;
-
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ParentAppProvider>(context);
@@ -62,15 +60,16 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
                           const SizedBox(height: 2),
                           Text(parent.relationship, style: AppTextStyles.caption.copyWith(color: Colors.white70)),
                           const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              const Icon(Icons.email_outlined, color: Colors.white70, size: 14),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(parent.email, style: AppTextStyles.bodySmall.copyWith(color: Colors.white70), overflow: TextOverflow.ellipsis),
-                              ),
-                            ],
-                          ),
+                          if (parent.email.isNotEmpty && !AuthService.isCodeLoginEmail(parent.email))
+                            Row(
+                              children: [
+                                const Icon(Icons.email_outlined, color: Colors.white70, size: 14),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(parent.email, style: AppTextStyles.bodySmall.copyWith(color: Colors.white70), overflow: TextOverflow.ellipsis),
+                                ),
+                              ],
+                            ),
                           Row(
                             children: [
                               const Icon(Icons.phone_android_rounded, color: Colors.white70, size: 14),
@@ -183,25 +182,19 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
               subtitle: 'Update full name & phone number',
               onTap: () => _showEditProfileModal(context, provider),
             ),
-            _buildOptionTile(
-              icon: Icons.lock_outline_rounded,
-              title: 'Change Password',
-              subtitle: 'Update account password via Supabase Auth',
-              onTap: () => _showChangePasswordModal(context, provider),
-            ),
-            _buildSwitchTile(
-              icon: Icons.fingerprint_rounded,
-              title: 'Biometric Lock (Fingerprint/FaceID)',
-              subtitle: 'Require biometric scan when opening app',
-              value: _biometricLock,
-              onChanged: (val) {
-                setState(() => _biometricLock = val);
-              },
-            ),
+            // Parents sign in with the school's Parent Code; only an older
+            // email/password account has a password to change.
+            if (provider.parent.email.isNotEmpty && !AuthService.isCodeLoginEmail(provider.parent.email))
+              _buildOptionTile(
+                icon: Icons.lock_outline_rounded,
+                title: 'Change Password',
+                subtitle: 'Update account password via Supabase Auth',
+                onTap: () => _showChangePasswordModal(context, provider),
+              ),
             _buildOptionTile(
               icon: Icons.notifications_none_rounded,
               title: 'Notification Settings',
-              subtitle: 'Configure push alerts & category rules',
+              subtitle: 'Alerts from the school',
               onTap: () {
                 Navigator.push(
                   context,
@@ -232,48 +225,6 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
               title: 'Logout Account',
               subtitle: 'Sign out safely from this device',
               onTap: () => _showLogoutDialog(context),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSwitchTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: AnimatedCard(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: const BoxDecoration(
-                color: AppColors.subSurface,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: AppColors.brandIndigo, size: 20),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: AppTextStyles.headingSmall.copyWith(fontSize: 14)),
-                  Text(subtitle, style: AppTextStyles.caption),
-                ],
-              ),
-            ),
-            Switch(
-              value: value,
-              activeColor: AppColors.brandIndigo,
-              onChanged: onChanged,
             ),
           ],
         ),
@@ -358,7 +309,8 @@ class _ParentProfileScreenState extends State<ParentProfileScreen> {
                 decoration: const InputDecoration(labelText: 'Relationship (Father/Mother/Guardian)'),
               ),
               const SizedBox(height: 12),
-              Text('Email: ${provider.parent.email} (Read-only)', style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+              if (provider.parent.email.isNotEmpty && !AuthService.isCodeLoginEmail(provider.parent.email))
+                Text('Email: ${provider.parent.email} (Read-only)', style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,

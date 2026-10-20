@@ -352,6 +352,30 @@ class ParentAppProvider extends ChangeNotifier {
     _attendanceMonth = DateTime.now().month;
   }
 
+  /// Parent Access Code sign-in: a real Supabase session for the family's
+  /// account, then the server session (children) is loaded.
+  Future<AuthResponse> loginWithParentCode(String code) async {
+    _isAuthLoading = true;
+    _authError = null;
+    notifyListeners();
+
+    final response = await AuthService.signInWithParentCode(code);
+    if (response.status == AuthStatus.success) {
+      try {
+        await _loadSessionAndChildren();
+      } catch (e) {
+        _isLoggedIn = true;
+        _dashboardError = parentErrorMessage(e);
+      }
+    } else {
+      _authError = response.errorMessage;
+    }
+
+    _isAuthLoading = false;
+    notifyListeners();
+    return response;
+  }
+
   Future<AuthResponse> loginWithEmail({required String email, required String password}) async {
     _isAuthLoading = true;
     _authError = null;

@@ -61,16 +61,20 @@ void main() {
     });
   });
 
-  group('3. Access code is only a linking secret, never a login', () {
+  group('3. The access code is verified only by the server', () {
     test('empty access code is rejected', () async {
       final res = await ParentAppProvider(autoStart: false).linkChildWithCode(codeOrStudentId: '   ');
       expect(res.status, LinkStatus.invalidCode);
       expect(res.student, isNull);
     });
 
-    test('sign-in without email/password fails before any request', () async {
-      final res = await AuthService.signInWithEmailPassword(email: 'PRT-ABCD-1234', password: '');
-      expect(res.status, AuthStatus.invalidCredentials);
+    test('without the server the code opens nothing (no local lookup, no data)', () async {
+      AuthService.debugCodeLoginInvoker = null;
+      final provider = ParentAppProvider(autoStart: false);
+      final res = await provider.loginWithParentCode('PRT-ABCD-1234');
+      expect(res.status, AuthStatus.networkError);
+      expect(provider.isLoggedIn, isFalse);
+      expect(provider.children, isEmpty);
     });
   });
 

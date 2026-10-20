@@ -12,8 +12,8 @@ the live database with real test accounts.
 
 | # | Feature | School OS side | Parents App side | Authoritative data / RPC | Authorization (server) | Status |
 |---|---|---|---|---|---|---|
-| 1 | Parent sign-up / sign-in | — | `ParentLoginScreen`, `ParentSignupScreen` → Supabase Auth email/password | `auth.users` | Auth; no metadata grants anything (01) | CODE TESTED (validation) · NOT VERIFIED (LIVE) |
-| 2 | Code-only "login" | — | **removed** | — | — | FIXED (was a bearer-code hole) |
+| 1 | Parent sign-in with Parent Code (21 Oct) | issue / regenerate / disable code | `ParentLoginScreen` → Edge Function `parent-code-login` → one-time token → session | `auth.users` (one family account), `10` resolve/bind → `parent_claim_child` | server only (service role); rate limited; disabled/unlinked parents refused | CODE TESTED · PENDING DEPLOYMENT (10, 11, function) |
+| 2 | Old anonymous code lookup "login" | — | **removed**; replaced by row 1 | — | — | FIXED AND LIVE VERIFIED (07b/08) |
 | 3 | Anonymous student lookup by code / attendance / results | — | no longer called | `lookup_student_by_parent_access_code`, `get_parent_student_attendance`, `get_parent_student_published_results` | 07b revokes / wraps | **BLOCKER until 07b is applied** (live probe: still anon-callable) |
 | 4 | Issue / regenerate / revoke access code | Parent Access screens (`AccessService`, `ParentService.enableParentAccessForStudent`) | — | `students.parent_access_code`, school-created `parents` + `parent_students` | admin RLS (01/02) | existing · NOT VERIFIED (LIVE) |
 | 5 | Link child with code | — | `LinkChildScreen` → `parent_claim_child` | adopts the school-created `parents` row; `parent_students`; `school_os_repair.parent_code_claims` | signed in; code valid & unique; one claim per code; same school; not staff; active; 5 failures/15 min per account, 300 global | CODE TESTED · PENDING MIGRATION (08) · 09 T1–T10 |
@@ -42,7 +42,7 @@ the live database with real test accounts.
 | 28 | Notification preferences | — | inert switches removed | — | — | NOT IMPLEMENTED |
 | 29 | School info / branding | School configuration | `parent_get_school` | `schools` (+ current session) | linked parent | CODE TESTED · PENDING MIGRATION |
 | 30 | Parent profile edit | — | `parent_update_contact` | `profiles`, `parents` (own rows) | parent role, own rows | PENDING MIGRATION · 09 T26 |
-| 31 | Password change / reset | — | Supabase Auth | `auth.users` | Auth | CODE TESTED (validation) · reset email needs Site URL |
+| 31 | Password change / reset, email sign-up | — | removed from the app (parents have no password); kept only for older email accounts | `auth.users` | Auth | NOT APPLICABLE for code sign-in |
 | 32 | Parent meetings / PTM | Meetings audience is staff-only | screen says not available | `events` (staff) | — | NOT IMPLEMENTED (needs parent audience in School OS) |
 | 33 | Messaging | — | screen says not available | — | — | NOT IMPLEMENTED (product decision) |
 | 34 | Transport | `transport_routes` only | screen says not available | no student↔route link | — | NOT IMPLEMENTED (data model) |

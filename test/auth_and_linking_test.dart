@@ -32,6 +32,110 @@ void main() {
 
   });
 
+  group('Parent Code sign-in (Edge Function parent-code-login)', () {
+    late List<String> invoked;
+    late List<String> verified;
+    setUp(() {
+      invoked = [];
+      verified = [];
+      AuthService.debugTokenVerifier = (hash) async => verified.add(hash);
+    });
+    tearDown(() {
+      AuthService.debugCodeLoginInvoker = null;
+      AuthService.debugTokenVerifier = null;
+    });
+
+    test('malformed code is rejected before any request', () async {
+      AuthService.debugCodeLoginInvoker = (c) async {
+        invoked.add(c);
+        return {};
+      };
+      for (final bad in ['', '  ', 'AB1', "x'; drop", 'SC AB']) {
+        final r = await AuthService.signInWithParentCode(bad);
+        expect(r.status, AuthStatus.invalidCredentials, reason: bad);
+      }
+      expect(invoked, isEmpty);
+    });
+
+    test('valid code: only the normalised code is sent, the one-time token becomes the session', () async {
+      AuthService.debugCodeLoginInvoker = (c) async {
+        invoked.add(c);
+        return {'success': true, 'token_hash': 'hash-1', 'type': 'magiclink'};
+      };
+      final r = await AuthService.signInWithParentCode(' sc-ab12-cd34 ');
+      expect(r.status, AuthStatus.success);
+      expect(invoked, ['SC-AB12-CD34']);
+      expect(verified, ['hash-1']);
+    });
+
+    test('every server refusal is a failure and no session is created', () async {
+      const expected = {
+        'INVALID_CODE': AuthStatus.invalidCredentials,
+        'ACCESS_DISABLED': AuthStatus.inactiveAccount,
+        'RATE_LIMITED': AuthStatus.backendError,
+        'USE_EMAIL_LOGIN': AuthStatus.backendError,
+        'ALREADY_CLAIMED': AuthStatus.backendError,
+        'NOT_DEPLOYED': AuthStatus.backendError,
+        'INTERNAL': AuthStatus.backendError,
+      };
+      for (final e in expected.entries) {
+        AuthService.debugCodeLoginInvoker = (_) async => {
+              'success': false,
+              'error': {'code': e.key, 'message': 'msg'}
+            };
+        final r = await AuthService.signInWithParentCode('SC-AB12-CD34');
+        expect(r.status, e.value, reason: e.key);
+        expect(r.errorMessage, isNotEmpty);
+      }
+      expect(verified, isEmpty);
+    });
+
+    test('success without a token is not treated as signed in', () async {
+      AuthService.debugCodeLoginInvoker = (_) async => {'success': true};
+      final r = await AuthService.signInWithParentCode('SC-AB12-CD34');
+      expect(r.status, isNot(AuthStatus.success));
+      expect(verified, isEmpty);
+    });
+
+    test('network failure and failed token exchange are reported, not hidden', () async {
+      AuthService.debugCodeLoginInvoker = (_) async => throw Exception('socket');
+      expect((await AuthService.signInWithParentCode('SC-AB12-CD34')).status, AuthStatus.networkError);
+
+      AuthService.debugCodeLoginInvoker = (_) async => {'success': true, 'token_hash': 'h'};
+      AuthService.debugTokenVerifier = (_) async => throw Exception('otp expired');
+      expect((await AuthService.signInWithParentCode('SC-AB12-CD34')).status, AuthStatus.backendError);
+    });
+
+    test('provider: code sign-in loads the children from the server session', () async {
+      final rpc = FakeRpc()..install();
+      installEmptyChildData(rpc);
+      rpc.on('parent_get_session', (_) => sessionJson(children: [childJson('st-1', name: 'Asha')]));
+      AuthService.debugCodeLoginInvoker = (_) async => {'success': true, 'token_hash': 'h'};
+      final provider = ParentAppProvider(autoStart: false);
+      final r = await provider.loginWithParentCode('SC-AB12-CD34');
+      expect(r.status, AuthStatus.success);
+      expect(provider.isLoggedIn, isTrue);
+      expect(provider.selectedChild.id, 'st-1');
+    });
+
+    test('provider: refused code leaves the app signed out', () async {
+      AuthService.debugCodeLoginInvoker = (_) async => {
+            'success': false,
+            'error': {'code': 'INVALID_CODE'}
+          };
+      final provider = ParentAppProvider(autoStart: false);
+      final r = await provider.loginWithParentCode('SC-WRONG-0000');
+      expect(r.status, AuthStatus.invalidCredentials);
+      expect(provider.isLoggedIn, isFalse);
+      expect(provider.authError, isNotNull);
+    });
+
+    test('code-login accounts are recognised by their synthetic address', () {
+      expect(AuthService.isCodeLoginEmail('parent-abc@code-login.invalid'), isTrue);
+      expect(AuthService.isCodeLoginEmail('mom@gmail.com'), isFalse);
+    });
+  });
+
   group('Server session parsing (parent_get_session)', () {
     test('children and parent come from the server payload', () {
       final s = ParentSession.fromJson(sessionJson(children: [childJson('st-1', name: 'Asha')]));

@@ -58,6 +58,14 @@ select count(*) from public.schools where name like 'ZZ Parent Test School%';   
 select count(*) from auth.users where email like 'zz-pi-%@example.invalid';      -- 0
 ```
 
+## 4b. Parent Code sign-in (needed for the current Parents App build)
+1. SQL editor: run `database_repair/10_parent_code_login.sql`. The final check must show
+   `false` / `false` for both functions.
+2. SQL editor: run `database_repair/11_parent_code_login_tests_rolled_back.sql`. Every row PASS.
+3. Deploy the Edge Function `supabase/functions/parent-code-login` with **JWT verification off**
+   (see its README). From outside, a wrong code must return HTTP 401 `INVALID_CODE`.
+4. In School OS enable parent access for a test student; in the Parents App enter only that code.
+
 ## 5. Tests and builds (local)
 ```bash
 cd "E:/parents app" && flutter analyze && flutter test && flutter build web && flutter build apk --release
@@ -70,8 +78,9 @@ School OS tests: run the offline files only (the live ones write to the database
 
 ## 6. End-to-end check with test accounts (not real families)
 1. School OS (admin of a test school): Students → a test student → Parent Access → enable; note the code.
-2. Parents App: Create account (email/password) → verify email if required → sign in → Link child with
-   the code. Expect the child and school name.
+2. Parents App: enter only the code on the login screen. Expect the child and school name. Log out and
+   enter the code again → same child; regenerate the code in School OS → the new code opens the same
+   account, the old one is refused.
 3. School OS: record a fee payment for that student (Fees → Record payment). Note the `RCT-…` number.
    Press the button twice / retry after a timeout: one payment only.
 4. Parents App: pull to refresh on Fees → the payment and balance; open the receipt → same number,

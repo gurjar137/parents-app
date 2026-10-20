@@ -101,6 +101,122 @@ class AuthService {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Parent Access Code sign-in (the only sign-in shown to parents).
+  //
+  // The code is checked by the Edge Function `parent-code-login` on the
+  // server (School OS repo: supabase/functions/parent-code-login, database
+  // 10_parent_code_login.sql). It returns a one-time token for the family's
+  // own Auth account, exchanged here for a normal session. The code itself
+  // is never stored on the device and unlocks no data by itself.
+  // ------------------------------------------------------------------
+
+  /// Test hooks; production uses the Edge Function and Supabase Auth.
+  @visibleForTesting
+  static Future<Map<String, dynamic>> Function(String code)? debugCodeLoginInvoker;
+  @visibleForTesting
+  static Future<void> Function(String tokenHash)? debugTokenVerifier;
+
+  static Future<Map<String, dynamic>> _invokeCodeLogin(String code) async {
+    try {
+      final res = await SupabaseService.client.functions
+          .invoke('parent-code-login', body: {'code': code})
+          .timeout(ParentApi.timeout);
+      return res.data is Map ? Map<String, dynamic>.from(res.data as Map) : <String, dynamic>{};
+    } on FunctionException catch (e) {
+      if (e.details is Map) return Map<String, dynamic>.from(e.details as Map);
+      if (e.status == 404) {
+        return {
+          'success': false,
+          'error': {'code': 'NOT_DEPLOYED', 'message': 'Parent sign-in is not yet enabled on the school server. Please contact the school office.'}
+        };
+      }
+      return {'success': false, 'error': {'code': 'INTERNAL'}};
+    }
+  }
+
+  static Future<void> _verifyToken(String tokenHash) async {
+    await SupabaseService.client.auth.verifyOTP(type: OtpType.magiclink, tokenHash: tokenHash);
+  }
+
+  static Future<AuthResponse> signInWithParentCode(String parentCode) async {
+    final code = parentCode.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+    if (code.length < 6 || code.length > 40 || !RegExp(r'^[A-Z0-9-]+$').hasMatch(code)) {
+      return const AuthResponse(
+        status: AuthStatus.invalidCredentials,
+        errorMessage: 'Please enter the Parent Access Code from your school (for example SC-AB12-CD34).',
+      );
+    }
+    if (debugCodeLoginInvoker == null && !SupabaseService.isInitialized) {
+      return const AuthResponse(
+        status: AuthStatus.networkError,
+        errorMessage: 'The app could not connect to the school server. Please check your connection and restart the app.',
+      );
+    }
+
+    Map<String, dynamic> body;
+    try {
+      body = await (debugCodeLoginInvoker ?? _invokeCodeLogin)(code);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[AuthService] code login request failed: ${e.runtimeType}');
+      return const AuthResponse(
+        status: AuthStatus.networkError,
+        errorMessage: 'Unable to connect. Please check your internet connection and try again.',
+      );
+    }
+
+    final tokenHash = body['token_hash']?.toString() ?? '';
+    if (body['success'] == true && tokenHash.isNotEmpty) {
+      try {
+        await (debugTokenVerifier ?? _verifyToken)(tokenHash);
+        return const AuthResponse(status: AuthStatus.success);
+      } catch (e) {
+        if (kDebugMode) debugPrint('[AuthService] token exchange failed: ${e.runtimeType}');
+        return const AuthResponse(
+          status: AuthStatus.backendError,
+          errorMessage: 'Sign-in could not be completed. Please try again.',
+        );
+      }
+    }
+
+    final error = body['error'] is Map ? Map<String, dynamic>.from(body['error'] as Map) : const <String, dynamic>{};
+    final serverMessage = (error['message'] ?? '').toString();
+    switch ((error['code'] ?? '').toString()) {
+      case 'INVALID_CODE':
+      case 'INVALID_INPUT':
+        return const AuthResponse(
+          status: AuthStatus.invalidCredentials,
+          errorMessage: 'This Parent Access Code is not valid. Please check it with the school office.',
+        );
+      case 'ACCESS_DISABLED':
+        return const AuthResponse(
+          status: AuthStatus.inactiveAccount,
+          errorMessage: 'Parent access for this child is turned off. Please contact the school office.',
+        );
+      case 'RATE_LIMITED':
+        return const AuthResponse(
+          status: AuthStatus.backendError,
+          errorMessage: 'Too many attempts. Please wait 15 minutes and try again.',
+        );
+      case 'USE_EMAIL_LOGIN':
+      case 'ALREADY_CLAIMED':
+      case 'NOT_DEPLOYED':
+        return AuthResponse(
+          status: AuthStatus.backendError,
+          errorMessage: serverMessage.isNotEmpty ? serverMessage : 'Sign-in is not possible with this code. Please contact the school office.',
+        );
+      default:
+        return const AuthResponse(
+          status: AuthStatus.backendError,
+          errorMessage: 'Sign-in failed. Please try again.',
+        );
+    }
+  }
+
+  /// True for the family account created by code sign-in (its address is
+  /// synthetic and it has no password the parent knows).
+  static bool isCodeLoginEmail(String email) => email.toLowerCase().endsWith('@code-login.invalid');
+
   static Future<AuthResponse> signInWithEmailPassword({
     required String email,
     required String password,

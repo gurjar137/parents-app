@@ -38,6 +38,27 @@ Applied by the school owner in the SQL editor: `08`, `07b` (after a fix, commit 
 Still not verified: the end-to-end check with real test accounts in both apps (DEPLOYMENT_GUIDE §6)
 and the store releases.
 
+## Parent Code sign-in (product decision, 21 Oct 2026)
+Parents sign in with the student's Parent Access Code only — no email or password. This is **not** the
+old anonymous lookup: the code is checked by the Edge Function `parent-code-login` (service role,
+server side), which opens the family's own Supabase Auth account and returns a one-time token; the app
+exchanges it for a normal session, so every server check above still applies.
+- Database: `database_repair/10_parent_code_login.sql` (`parent_code_login_resolve`,
+  `parent_code_login_bind`, service_role only) + rolled-back tests `11_…`.
+- Function: `supabase/functions/parent-code-login/` (`login.ts` logic, 7 unit tests; `index.ts`).
+- One account per family (`parent-<student id>@code-login.invalid`, random password nobody sees,
+  `app_metadata.school_os_parent_code_login = true`). Same code, a regenerated code, logout/login or a
+  new phone all open the same account. A sibling's code can still be added inside the app (it links to
+  the same account).
+- Rate limit: 10 failed codes per client (hashed IP) per 15 min, 500 overall.
+- **Trade-off:** the code is the family's password. Anyone who has it can open the child's records.
+  Regenerate the code to stop new sign-ins; "Disable parent access" (or remove the link) cuts off
+  devices that are already signed in, immediately.
+- A code claimed earlier by an email/password parent account cannot open that account
+  (`USE_EMAIL_LOGIN`).
+- Status: **code tested** (Flutter 78 tests, function 7 tests, SQL parse) · **pending deployment** of
+  `10`, `11` run, function deploy (JWT verification off).
+
 ## Production blocker (resolved 20 Oct 2026, see above)
 Live on 21 Oct 2026, anonymous callers can execute:
 - `lookup_student_by_parent_access_code(p_code)`: returns a student row for a valid code.
