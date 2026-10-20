@@ -18,9 +18,13 @@ class OfflineBanner extends StatelessWidget {
         children: [
           const Icon(Icons.sync_rounded, size: 14, color: AppColors.textMuted),
           const SizedBox(width: 6),
-          Text(
-            'Last updated: $lastUpdatedTime',
-            style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+          Flexible(
+            child: Text(
+              'Last updated: $lastUpdatedTime',
+              style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
