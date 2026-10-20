@@ -117,6 +117,17 @@ void main() {
       expect(provider.selectedChild.id, 'st-9');
     });
 
+    test('provider: ALREADY_LINKED is a successful outcome with the child selected', () async {
+      installEmptyChildData(rpc);
+      rpc.on('parent_claim_child', (_) => {'success': true, 'reason': 'ALREADY_LINKED', 'student_id': 'st-9'});
+      rpc.on('parent_get_session', (_) => sessionJson(children: [childJson('st-9', name: 'Ravi')]));
+      final provider = ParentAppProvider(autoStart: false);
+      final r = await provider.linkChildWithCode(codeOrStudentId: 'SC-RAVI-0001');
+      expect(r.status, LinkStatus.alreadyLinked);
+      expect(r.student?.id, 'st-9');
+      expect(provider.selectedChild.id, 'st-9');
+    });
+
     test('provider: claim accepted but child not in session -> reported as an error, not success', () async {
       installEmptyChildData(rpc);
       rpc.on('parent_claim_child', (_) => {'success': true, 'reason': 'LINKED', 'student_id': 'st-9'});

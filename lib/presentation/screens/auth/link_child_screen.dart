@@ -58,7 +58,7 @@ class _LinkChildScreenState extends State<LinkChildScreen> {
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (res.status == LinkStatus.success && res.student != null) {
+    if ((res.status == LinkStatus.success || res.status == LinkStatus.alreadyLinked) && res.student != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(res.userMessage ?? 'Successfully linked ${res.student!.name}!'),

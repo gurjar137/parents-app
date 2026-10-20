@@ -50,11 +50,13 @@ class _LinkChildModalState extends State<LinkChildModal> {
     if (!mounted) return;
     setState(() => _isValidating = false);
 
-    if (res.status == LinkStatus.success && res.student != null) {
+    if ((res.status == LinkStatus.success || res.status == LinkStatus.alreadyLinked) && res.student != null) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Successfully linked ${res.student!.name}!'),
+          content: Text(res.status == LinkStatus.alreadyLinked
+              ? '${res.student!.name} is already linked to your account.'
+              : 'Successfully linked ${res.student!.name}!'),
           backgroundColor: AppColors.success,
         ),
       );
